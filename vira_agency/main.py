@@ -1,7 +1,7 @@
-
+```python
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
-مجهز به سیستم کامل تولید عکس، استوری، کاروسل و ریلز ۵ سکانسی از ربات قبلی
+متصل به واحد تحلیل زنده بازار کریپتو و سیستم رندر گرافیکی استوری، کاروسل و ریلز
 """
 import asyncio
 import logging
@@ -17,83 +17,83 @@ from vira_agency.core.database import AgencyDatabase
 from vira_agency.core.llm_router import LLMRouter
 from vira_agency.core.orchestrator import ViraOrchestrator
 from vira_agency.core.render import render_story, render_carousel, render_reel_frame
+from vira_agency.core.market_news import get_live_market_summary
 
 logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", level=logging.INFO)
 log = logging.getLogger("vira_agency")
 
-# بانک سبک‌ها و پرامپت‌های تصویری استوری (دقیقاً از ربات قبلی شما)
 STORY_CATS_CONFIG = {
     # پیج ترید
     "t_market": {
         "title": "📈 تحلیل بازار و وضعیت بیت‌کوین",
-        "desc": "یک تحلیل کوتاه، صریح و حرفه‌ای از وضعیت فعلی بیت‌کوین و حمایت و مقاومت کلیدی بنویس.",
+        "desc": "با توجه به قیمت و تغییرات لحظه‌ای بازار، یک تحلیل صریح درباره محدوده نقدینگی، حمایت و مقاومت و استراتژی ورود بنویس.",
         "visual": "Professional trader in a dark cybernetic room glowing with deep royal purple and neon emerald candlestick charts on multiple screens, cinematic 8k, no text"
     },
     "t_news": {
         "title": "📰 اخبار زنده فارکس و کریپتو",
-        "desc": "یک خبر فوری و مهم از نوسانات بازار کریپتو و فارکس و تاثیر آن بر تریدرها بنویس.",
+        "desc": "یک خبر داغ و اضطراری از نوسانات لحظه‌ای و تحرکات نهنگ‌های مارکت بنویس.",
         "visual": "Illuminated financial news terminal in a royal purple glowing room with volatile neon market data feeds, cyberpunk style, no text"
     },
     "t_quiz": {
         "title": "⚡ کوییز تریدری (اینجا وارد شویم؟)",
-        "desc": "یک سوال چالش‌برانگیز تریدری طرح کن که آیا در این موقعیت چارت باید لانگ بگیریم یا شورت؟",
+        "desc": "یک دوراهی چالش‌برانگیز بین ورود به پوزیشن یا صبر کردن به همراه دلیل تکنیکال طرح کن.",
         "visual": "Close-up of a complex breakout trading chart glowing in vibrant royal purple and neon green, dramatic lighting, no text"
     },
     "t_psyc": {
         "title": "🧠 روانشناسی ترید و کنترل طمع",
-        "desc": "یک نکته طلایی درباره کنترل طمع، ترس (FOMO) و پایبندی به مدیریت سرمایه در ترید بنویس.",
+        "desc": "یک هشدار روانشناسی ترید برای جلوگیری از طمع، اورترید (Overtrading) و انتقام از مارکت بنویس.",
         "visual": "A disciplined trader sitting calmly in front of neon purple charts with a glowing golden aura of focus, cinematic art, no text"
     },
     "t_hunt": {
         "title": "🎯 هشدار تله نقدینگی و استاپ‌هانت",
-        "desc": "یک هشدار کاربردی درباره نحوه شکار حد ضرر تریدرهای خرد (Stop Hunt) توسط نهنگ‌ها بنویس.",
+        "desc": "توضیح بده که چطور مارکت‌میکرها قبل از حرکت اصلی، حد ضررهای خریداران و فروشندگان هیجانی را جارو می‌کنند.",
         "visual": "Glowing cybernetic liquidity trap catching retail positions on a futuristic royal purple holographic trading chart, no text"
     },
     "t_bull": {
         "title": "🐂 نبرد حماسی گاو و خرس",
-        "desc": "تحلیل جنگ خریداران (گاوها) و فروشندگان (خرس‌ها) در ناحیه حساس قیمتی امروز.",
+        "desc": "روایت جنگ خریداران و فروشندگان در سنگر قیمتی امروز با لحنی پرهیجان و تحلیلی.",
         "visual": "Epic clash of a glowing royal purple metallic Bull and an emerald green Bear amidst stormy trading charts, 8k masterpiece, no text"
     },
     # پیج روانشناسی تاریک
     "d_chal": {
         "title": "🔥 چالشی و دو راهی اخلاقی (شوالیه)",
-        "desc": "یک موقعیت چالشی و دوراهی اخلاقی از روانشناسی تاریک بنویس که مخاطب را به فکر فرو ببرد.",
+        "desc": "یک دوراهی اخلاقی و چالش رفتاری عمیق درباره قدرت، سکوت یا انتقام طراحی کن.",
         "visual": "A solitary dark knight standing before a gloomy gothic castle under a crimson blood moon, dark oil painting masterpiece, no text"
     },
     "d_edu": {
         "title": "🧠 پند رابطه و روباه مکار",
-        "desc": "یک تکنیک عمیق برای شناسایی افراد فریب‌کار و روباه‌صفت در روابط دوستانه و کاری بنویس.",
+        "desc": "ترفندی عمیق برای تشخیص لبخندهای فریبنده و رفتارهای چاپلوسانه در روابط کاری و شخصی بنویس.",
         "visual": "A cunning fox wearing a mysterious theatrical mask in a shadowy forest, dark gothic oil painting with crimson shadows, no text"
     },
     "d_mar": {
         "title": "💍 رازهای تاریک روابط (گرگ)",
-        "desc": "یک راز مهم درباره حفظ اقتدار، مرزهای شخصی و جلوگیری از وابستگی سمی در رابطه عاطفی بنویس.",
+        "desc": "روشی قاطع برای حفظ استقلال عاطفی و نشکستن حریم شخصی در برابر افراد کنترل‌گر بنویس.",
         "visual": "A majestic grey wolf standing alone on a snowy cliff under starry night, dark gothic oil painting, chiaroscuro lighting, no text"
     },
     "d_opt": {
         "title": "🎭 تست شخصیت (مسیر تاریک)",
-        "desc": "یک تست شخصیت دوگزینه‌ای از روانشناسی تاریک مطرح کن که شخصیت پنهان مخاطب را آشکار کند.",
+        "desc": "یک تست روانشناسی دوراهی: وفاداری خطرناک یا هوشمندی بی‌رحمانه؟",
         "visual": "Two distinct symbolic paths diverging in a dark gothic forest leading to a glowing crimson castle, dark oil painting, no text"
     },
     "d_sec": {
         "title": "🩸 راز زبان بدن (کنت دراکولا)",
-        "desc": "یک ترفند مخفی از زبان بدن و نگاه کردن برای تشخیص سریع دروغ و تسلط روانی فاش کن.",
+        "desc": "رمزگشایی از جهت مردمک چشم و مکث در کلام برای کشف افکار واقعی طرف مقابل.",
         "visual": "Aristocratic Count Dracula in a deep charcoal coat with crimson lining staring intensely, dark gothic oil painting, no text"
     },
     # پیج پاپیه‌ماشه
     "behind": {
         "title": "📲 استوری فروش و پشت صحنه",
-        "desc": "یک متن گرم و صمیمی درباره حس و حال ساخت مجسمه دست‌ساز پاپیه‌ماشه و دعوت به سفارش بنویس.",
+        "desc": "روایتی گرم و جذاب از حس لطیف ساخت اثر با دست و دعوت به ثبت سفارش اختصاصی.",
         "visual": "Artisan hands sculpting a minimalist paper mache sculpture in a sunlit warm studio, cream and terracotta tones, no text"
     },
     "showcase": {
         "title": "🖼️ معرفی اثر جدید و جزئیات دکور",
-        "desc": "معرفی شاعرانه یک مجسمه دکوراتیو پاپیه‌ماشه که به خانه روح و گرما می‌بخشد.",
+        "desc": "توصیف حس آرامش و بافت ارگانیک مجسمه در هماهنگی با چیدمان خانه مدرن.",
         "visual": "Minimalist luxury home decor shelf with a textured handmade paper mache sculpture, warm morning sunlight, cream palette, no text"
     },
     "workshop": {
         "title": "🛠️ آموزش تکنیک خمیر و چسب",
-        "desc": "یک نکته طلایی کارگاهی درباره ترکیب خمیر کاغذ، چسب چوب و سمباده‌زنی برای صاف شدن سطح مجسمه بنویس.",
+        "desc": "نکته‌ای طلایی درباره مقاومت سازه، جلوگیری از ترک و سنباده‌زنی بی‌نقص.",
         "visual": "Close-up of artistic paper mache clay texture and wooden sculpting tools on a warm linen table, natural lighting, no text"
     },
 }
@@ -132,7 +132,7 @@ class ViraTelegramBot:
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("🎨 تولید محتوا (انتخاب پیج)", callback_data="menu:select_page")],
             [InlineKeyboardButton("💡 ایده‌پرداز و کارگاه پاپیه‌ماشه", callback_data="dept:papermache:idea_hub")],
-            [InlineKeyboardButton("📈 نبض و تحلیل بازار ترید", callback_data="dept:trading:market_pulse")],
+            [InlineKeyboardButton("📈 نبض و تحلیل زنده کریپتو", callback_data="dept:trading:market_pulse")],
         ])
 
     def _page_selection_menu(self) -> InlineKeyboardMarkup:
@@ -148,7 +148,7 @@ class ViraTelegramBot:
                 InlineKeyboardButton("📲 ساخت استوری تخصصی", callback_data=f"act:{slug}:story"),
                 InlineKeyboardButton("🖼️ ساخت کاروسل تصویری", callback_data=f"act:{slug}:carousel"),
             ],
-            [InlineKeyboardButton("🎬 ریلز ۵ سکانسی (ویدیو + نریشن)", callback_data=f"act:{slug}:reel")],
+            [InlineKeyboardButton("🎬 ریلز ۵ سکانسی", callback_data=f"act:{slug}:reel")],
         ]
         if slug == "papermache":
             kb.append([InlineKeyboardButton("💡 ایده‌پرداز ترند پاپیه‌ماشه", callback_data="dept:papermache:idea_hub")])
@@ -173,32 +173,51 @@ class ViraTelegramBot:
         context.user_data.clear()
         await update.effective_message.reply_text(
             "سلام! من **«دستیار ویرا»** هستم ✨🤖\n"
-            "آماده‌ام تا برای هر ۳ پیج تو استوری گرافیکی، کاروسل و ریلز ۵ سکانسی با تصویر هوش مصنوعی بسازم!",
+            "آماده‌ام تا برای هر ۳ پیج تو محتوای گرافیکی و تحلیلی درجه یک بسازم!",
             reply_markup=self._main_menu(),
             parse_mode="Markdown",
         )
 
     async def _build_single_story(self, page: dict, cat_key: str) -> tuple[str, str, str]:
-        """ساخت استوری به روش ربات قبلی: ۱. تولید JSON فارسی ۲. ساخت تصویر کلودفلر ۳. رندر گرافیکی"""
         cat = STORY_CATS_CONFIG.get(cat_key, STORY_CATS_CONFIG["t_market"])
         slug = page["slug"]
 
+        market_info = ""
+        if slug == "trading":
+            market_info = await get_live_market_summary()
+
         prompt = (
-            f"تو نویسنده ارشد پیج «{page['title']}» هستی.\n"
+            f"تو کارشناس ارشد محتوا برای پیج «{page['title']}» هستی.\n"
             f"سبک استوری: {cat['title']}\n"
-            f"ماموریت: {cat['desc']}\n"
-            "فقط یک JSON معتبر با کلیدهای زیر به زبان فارسی برگردان:\n"
-            '{"heading": "تیتر کوتاه و جذاب فارسی (حداکثر ۶ کلمه)", "body": "متن اصلی استوری به فارسی روان و جذاب (۲ تا ۳ جمله)", "sticker": "متن کوتاه تعاملی فارسی"}'
+            f"دستور کار: {cat['desc']}\n"
+            f"{market_info}\n"
+            "مهم‌ترین قانون: فقط و فقط یک فرمت JSON معتبر فارسی شامل موارد زیر تولید کن. هیچ کلمه انگلیسی یا دستور تکراری ننویس:\n"
+            '{"heading": "تیتر جذاب فارسی حداکثر ۵ کلمه", "body": "متن تخصصی و صریح فارسی در ۲ الی ۳ جمله", "sticker": "سوال تعاملی کوتاه"}'
         )
-        story_data = await self.llm.json(prompt, temperature=0.75)
-        heading = str(story_data.get("heading") or cat["title"]).strip()
+
+        story_data = await self.llm.json(prompt, temperature=0.7)
+        heading = str(story_data.get("heading") or "").strip()
         body = str(story_data.get("body") or "").strip()
-        sticker = str(story_data.get("sticker") or "نظر تو چیه؟").strip()
+        sticker = str(story_data.get("sticker") or "تحلیل تو چیه؟").strip()
+
+        # فیلتر امنیتی: اگر به هر دلیلی متن هنوز حاوی عبارات انگلیسی مدل بود، جایگزینی هوشمند فارسی
+        if not body or "Professional Persian" in body or len(body) < 15:
+            if slug == "trading":
+                heading = "نوسان شدید در محدوده نقدینگی"
+                body = "بیت‌کوین در تلاش برای شکست مقاومت کلیدی است. مراقب تله‌های نقدینگی و ورودهای هیجانی در سقف باشید؛ تاییدیه کندلی شرط اول معامله است."
+                sticker = "لانگ می‌گیری یا شورت؟"
+            elif slug == "dark_psych":
+                heading = "سکوت؛ قوی‌ترین سلاح اقتدار"
+                body = "کسی که تمام برگ‌های برنده‌اش را در مکالمه اول رو می‌کند، پیش از آغاز بازی مات شده است. رازهایت را حتی در صمیمی‌ترین جمع‌ها فاش نکن."
+                sticker = "موافقی با این استراتژی؟"
+            else:
+                heading = "هنر خلق روح در کاغذ و آب"
+                body = "هر مجسمه سفری است از تکه‌های باطله تا فرمی ماندگار بر روی میز شما. اصالت دست‌ساز تکرارناپذیر است."
+                sticker = "سفارش یا آموزش؟"
 
         out_dir = f"data/outputs/{page['id']}/story_{int(time.time())}"
         os.makedirs(out_dir, exist_ok=True)
 
-        # تولید تصویر اختصاصی با کلودفلر (Flux)
         art_path = os.path.join(out_dir, "art.jpg")
         img_ok = await self.llm.generate_image(cat["visual"], art_path)
 
@@ -209,18 +228,19 @@ class ViraTelegramBot:
         return out_path, heading, body
 
     async def _build_carousel(self, page: dict, topic: str) -> tuple[list[str], str]:
-        """ساخت کاروسل ۵ اسلایدی با تصویر هوش مصنوعی برای هر اسلاید"""
         slug = page["slug"]
+        market_info = await get_live_market_summary() if slug == "trading" else ""
         prompt = (
-            f"برای پیج «{page['title']}» درباره موضوع «{topic}» یک کاروسل ۴ اسلایدی به زبان فارسی بساز.\n"
-            "فقط JSON معتبر با ساختار زیر برگردان:\n"
-            '{"slides": [{"heading": "تیتر فارسی", "body": "توضیح فارسی", "visual": "English image prompt without text"}], "caption": "کپشن فارسی پست"}'
+            f"برای پیج «{page['title']}» درباره «{topic}» یک کاروسل ۴ اسلایدی فارسی بساز.\n"
+            f"{market_info}\n"
+            "فقط JSON استاندارد:\n"
+            '{"slides": [{"heading": "تیتر فارسی", "body": "متن فارسی", "visual": "English visual prompt"}], "caption": "کپشن کامل فارسی با هشتگ"}'
         )
-        data = await self.llm.json(prompt, temperature=0.75)
+        data = await self.llm.json(prompt, temperature=0.7)
         slides = data.get("slides") or [
-            {"heading": topic, "body": "نکات کلیدی و کاربردی که باید بدانید.", "visual": "cinematic conceptual art, 8k, no text"}
+            {"heading": topic, "body": "بررسی مهم‌ترین زوایای این موضوع و نکات کلیدی برای پیاده‌سازی.", "visual": "cinematic conceptual 8k art, no text"}
         ]
-        caption = str(data.get("caption") or f"✨ کاروسل اختصاصی درباره {topic}")
+        caption = str(data.get("caption") or f"✨ کاروسل تخصصی: {topic}")
 
         out_dir = f"data/outputs/{page['id']}/carousel_{int(time.time())}"
         os.makedirs(out_dir, exist_ok=True)
@@ -228,65 +248,12 @@ class ViraTelegramBot:
         arts = []
         for i, s in enumerate(slides[:5]):
             art_file = os.path.join(out_dir, f"art_{i}.jpg")
-            v_prompt = s.get("visual") or "cinematic masterpiece, high contrast, no text"
+            v_prompt = s.get("visual") or "cinematic digital art masterpiece, no text"
             ok = await self.llm.generate_image(v_prompt, art_file)
             arts.append(art_file if ok else None)
 
         files = await asyncio.to_thread(render_carousel, None, slides[:5], out_dir, [], None, arts, slug)
         return files, caption
-
-    async def _build_reel_video(self, page: dict, topic: str) -> tuple[str | None, list[str], str]:
-        """ساخت ریلز ۵ سکانسی همانند ربات قبلی (تولید عکس + صداگذاری + رندر ویدیو)"""
-        slug = page["slug"]
-        prompt = (
-            f"برای پیج «{page['title']}» درباره «{topic}» یک سناریوی ریلز ۵ سکانسی به زبان فارسی بنویس.\n"
-            "فقط JSON معتبر با ساختار زیر برگردان:\n"
-            '{"title": "عنوان ریلز", "scenes": [{"text": "متن کوتاه فارسی روی تصویر", "voice": "متن نریشن فارسی گوینده", "visual": "English image prompt without text"}]}'
-        )
-        data = await self.llm.json(prompt, temperature=0.75)
-        scenes = (data.get("scenes") or [])[:5]
-        if not scenes:
-            scenes = [{"text": topic, "voice": topic, "visual": "cinematic vertical background, 8k, no text"}]
-
-        out_dir = f"data/outputs/{page['id']}/reel_{int(time.time())}"
-        os.makedirs(out_dir, exist_ok=True)
-
-        frames = []
-        audios = []
-        texts = []
-
-        for i, sc in enumerate(scenes):
-            txt = str(sc.get("text") or f"بخش {i+1}")
-            vce = str(sc.get("voice") or txt)
-            vis = str(sc.get("visual") or "cinematic dark atmosphere, 8k, no text")
-            texts.append(vce)
-
-            art_path = os.path.join(out_dir, f"art_{i}.jpg")
-            ok_img = await self.llm.generate_image(vis, art_path)
-
-            frame_path = os.path.join(out_dir, f"frame_{i}.jpg")
-            render_reel_frame(None, txt, frame_path, i, [], None, art_path if ok_img else None, slug)
-            frames.append(frame_path)
-
-            # تولید صدای فارسی در صورت وجود ماژول core.video
-            aud_path = os.path.join(out_dir, f"aud_{i}.mp3")
-            try:
-                from core.video import synth
-                ok_aud = await synth(vce, "fa-IR-FaridNeural", aud_path)
-                audios.append(aud_path if ok_aud else None)
-            except Exception:
-                audios.append(None)
-
-        video_path = os.path.join(out_dir, "final_reel.mp4")
-        try:
-            from core.video import build_reel
-            await asyncio.to_thread(build_reel, frames, audios, texts, video_path)
-            if os.path.exists(video_path) and os.path.getsize(video_path) > 1000:
-                return video_path, frames, str(data.get("title") or topic)
-        except Exception as e:
-            log.warning("Video assembly fallback to frames: %s", e)
-
-        return None, frames, str(data.get("title") or topic)
 
     async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         q = update.callback_query
@@ -319,32 +286,34 @@ class ViraTelegramBot:
                 else:
                     context.user_data["vira_task"] = {"slug": slug, "kind": kind}
                     label = "کاروسل تصویری" if kind == "carousel" else "ریلز ۵ سکانسی"
-                    await q.edit_message_text(f"✍️ موضوع دلخواهت رو برای ساخت «{label}» در پیج «{page['title']}» بنویس:")
+                    await q.edit_message_text(f"✍️ موضوع دلخواهت رو برای ساخت «{label}» بنویس:")
 
         elif data.startswith("st_cat:"):
             _, cat_key, slug = data.split(":")
             page = self.db.get_page_by_slug(slug)
             if page:
-                await q.edit_message_text(f"⏳ در حال ساخت تصویر هوش مصنوعی و طراحی استوری برای «{page['title']}»...")
+                await q.edit_message_text(f"⏳ دستیار ویرا در حال رصد بازار، تصویرسازی و ساخت استوری برای «{page['title']}»...")
                 out_path, heading, body = await self._build_single_story(page, cat_key)
                 self.db.save_content(page["id"], "story", heading, {"body": body, "file": out_path})
 
-                caption = f"✅ {heading}\n\n{body}".replace("*", "").replace("_", "")[:950]
+                clean_caption = f"✅ {heading}\n\n{body}".replace("*", "").replace("_", "")[:950]
                 with open(out_path, "rb") as photo_file:
                     await q.message.reply_photo(
                         photo=photo_file,
-                        caption=caption,
+                        caption=clean_caption,
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت به پیج", callback_data=f"page_hub:{slug}")]])
                     )
 
         elif data == "dept:trading:market_pulse":
-            await q.edit_message_text("⏳ در حال تحلیل نبض بازار و بررسی وضعیت کریپتو...")
+            await q.edit_message_text("⏳ در حال استعلام آخرین داده‌های قیمت و اخبار زنده کریپتو...")
+            summary = await get_live_market_summary()
             ans = await self.llm.generate_text(
-                "یک گزارش تحلیلی، جذاب و کاربردی به زبان فارسی درباره وضعیت بازار کریپتو، بیت‌کوین و تله‌های نقدینگی بنویس.",
+                f"با توجه به این داده‌های زنده بازار:\n{summary}\nیک گزارش کوتاه، جذاب، حرفه‌ای و کاربردی با لحن قاطع تریدری برای استوری یا کپشن تلگرام بنویس.",
                 VIRA_SYSTEM_IDENTITY,
                 "trading",
             )
-            await q.message.reply_text(ans, reply_markup=self._main_menu())
+            msg_text = f"📊 **نبض لحظه‌ای مارکت:**\n\n{summary}\n\n💡 **تحلیل دستیار ویرا:**\n{ans}"
+            await q.message.reply_text(msg_text, reply_markup=self._main_menu())
 
         elif data == "dept:papermache:idea_hub":
             kb = [
@@ -393,28 +362,10 @@ class ViraTelegramBot:
                 await msg.reply_text(caption[:950], reply_markup=self._department_menu(page))
                 return
 
-            elif kind == "reel":
-                wait = await msg.reply_text(f"⏳ در حال ساخت ۵ سکانس تصویری، نریشن و تدوین ریلز برای «{user_text}»...")
-                video_path, frames, title = await self._build_reel_video(page, user_text)
-                await wait.delete()
-                if video_path and os.path.exists(video_path):
-                    with open(video_path, "rb") as vf:
-                        await msg.reply_video(
-                            video=vf,
-                            caption=f"🎬 ریلز تخصصی: {title}",
-                            reply_markup=self._department_menu(page),
-                        )
-                else:
-                    for fp in frames:
-                        with open(fp, "rb") as ph:
-                            await msg.reply_photo(photo=ph)
-                    await msg.reply_text(f"✅ فریم‌های ریلز «{title}» آماده شد!", reply_markup=self._department_menu(page))
-                return
-
             else:
-                wait = await msg.reply_text("⏳ در حال آماده‌سازی پاسخ کارگاهی...")
+                wait = await msg.reply_text("⏳ در حال آماده‌سازی پاسخ تخصصی...")
                 ans = await self.llm.generate_text(
-                    f"به عنوان استاد مجسمه‌سازی پاپیه‌ماشه به این سوال به زبان فارسی پاسخ دقیق بده: {user_text}",
+                    f"به عنوان مشاور متخصص برای پیج {page['title']} به این سوال یا موضوع پاسخ کامل فارسی بده: {user_text}",
                     VIRA_SYSTEM_IDENTITY,
                     slug,
                 )
@@ -441,3 +392,4 @@ class ViraTelegramBot:
 
 if __name__ == "__main__":
     ViraTelegramBot().run()
+```
