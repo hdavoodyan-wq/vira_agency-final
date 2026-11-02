@@ -1,5 +1,5 @@
 """
-مسیریاب هوشمند چندموتوره (Multi-Provider LLM Router) با اتصال پایدار به Google Gemini
+مسیریاب هوشمند چندموتوره (Multi-Provider LLM Router) با اتصال پایدار به Google Gemini و پشتیبان ابری Cloudflare
 """
 import asyncio
 import json
@@ -80,3 +80,45 @@ class LLMRouter:
                 continue
 
         return f"⚠️ خطای ارتباط با جمینای (آخرین خطا: {last_err}). لطفاً کلید API را بررسی کنید."
+
+    async def generate_image(self, prompt: str, output_path: str) -> bool:
+        """سیستم دومرحله‌ای تولید تصویر با پشتیبان ابری کلودفلر (Cloudflare Workers AI)"""
+        cf_account = getattr(self.cfg, "cf_account_id", "") or os.getenv("CF_ACCOUNT_ID", "").strip()
+        cf_token = getattr(self.cfg, "cf_api_token", "") or os.getenv("CF_API_TOKEN", "").strip()
+
+        if cf_account and cf_token:
+            try:
+                url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account}/ai/run/@cf/blackforestlabs/flux-1-schnell"
+                payload = {"prompt": prompt}
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {cf_token}",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                
+                def _call_cf():
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        return resp.read()
+
+                img_bytes = await asyncio.to_thread(_call_cf)
+                if img_bytes and len(img_bytes) > 500:
+                    try:
+                        res_json = json.loads(img_bytes.decode("utf-8"))
+                        if "result" in res_json and "image" in res_json["result"]:
+                            import base64
+                            img_bytes = base64.b64decode(res_json["result"]["image"])
+                    except Exception:
+                        pass
+
+                    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                    with open(output_path, "wb") as f:
+                        f.write(img_bytes)
+                    return os.path.exists(output_path) and os.path.getsize(output_path) > 500
+            except Exception as e:
+                log.warning("Cloudflare image generation failed: %s", e)
+
+        return False
