@@ -1,6 +1,7 @@
 """
-موتور رندرینگ گرافیکی حرفه‌ای دستیار ویرا
-تصویر یک‌دست تمام‌صفحه، بلور و گرادیان شیشه‌ای، و رنگ‌آمیزی متمایز کلمات کلیدی
+موتور رندرینگ گرافیکی دستیار ویرا
+حفظ ۱۰۰٪ تناسب و نسبت تصویر بدون دفرمه شدن (Smart Aspect Ratio & Fit)
+طراحی اختصاصی برای ۳ پیج: ترید، روانشناسی تاریک و هنر پاپیه‌ماشه
 """
 import os
 import re
@@ -11,23 +12,23 @@ FONT_DIR = "data/fonts"
 FONT_PATH = os.path.join(FONT_DIR, "Vazirmatn-Bold.ttf")
 
 TAG_LABELS_FA = {
-    # ترید
     "t_market": "تحلیل بازار",
     "t_news": "اخبار داغ",
     "t_quiz": "کوییز تریدری",
     "t_psyc": "روانشناسی ترید",
     "t_hunt": "شکار استاپ",
     "t_bull": "نبرد گاو و خرس",
-    # روانشناسی تاریک
     "d_chal": "چالش روز",
     "d_edu": "ترفند تاریک",
     "d_mar": "قوانین رابطه",
     "d_opt": "تست شخصیت",
     "d_sec": "زبان بدن",
-    # پاپیه‌ماشه
-    "behind": "پشت صحنه",
-    "showcase": "معرفی اثر",
-    "workshop": "نکته کارگاه",
+    "art_mirror": "آینه ترند دکوراسیون",
+    "art_decor": "اکسسوری و ظروف مدرن",
+    "art_sculpture": "مجسمه فرم آزاد و مینیمال",
+    "behind": "پشت صحنه ساخت",
+    "showcase": "دکوراسیون منزل",
+    "workshop": "آموزش و کارگاه",
 }
 
 
@@ -68,35 +69,49 @@ def _get_theme(tag_or_slug: str):
     s = (tag_or_slug or "").lower()
     if s.startswith("t_") or "trad" in s:
         return {
-            "border": (139, 92, 246, 220),         # بنفش نئونی
-            "glass_tint": (15, 10, 32, 215),        # شیشه‌ای تیره بنفش
-            "accent": (74, 222, 128),               # سبز نئونی برای کلمات مهم
-            "text": (255, 255, 255),               # سفید خالص برای تیتر
-            "sub": (226, 232, 240),                # خاکستری خیلی روشن برای بدنه
+            "border": (139, 92, 246, 230),
+            "glass_tint": (15, 10, 32, 225),
+            "accent": (74, 222, 128),
+            "text": (255, 255, 255),
+            "sub": (226, 232, 240),
             "watermark": "@tradebazehn | تحلیل بازار"
         }
     elif s.startswith("d_") or "dark" in s:
         return {
-            "border": (220, 38, 38, 220),          # قرمز گوتیک
-            "glass_tint": (16, 12, 14, 225),        # شیشه‌ای تیره ذغالی
-            "accent": (239, 68, 68),                # قرمز آتشین برای کلمات کلیدی
+            "border": (220, 38, 38, 230),
+            "glass_tint": (16, 12, 14, 230),
+            "accent": (239, 68, 68),
             "text": (255, 255, 255),
             "sub": (229, 231, 235),
             "watermark": "@tradebazehn | روانشناسی تاریک"
         }
     else:
         return {
-            "border": (217, 119, 6, 220),          # کهربایی گرم
-            "glass_tint": (32, 24, 18, 220),        # شیشه‌ای گرم کارگاهی
-            "accent": (249, 115, 22),               # نارنجی سفالی برای نکات مهم
-            "text": (254, 243, 199),               # کرم روشن
-            "sub": (253, 230, 138),                # کرم طلایی
+            "border": (217, 119, 6, 230),
+            "glass_tint": (32, 24, 18, 230),
+            "accent": (249, 115, 22),
+            "text": (254, 243, 199),
+            "sub": (253, 230, 138),
             "watermark": "@papermache_art | هنر دست‌ساز"
         }
 
 
+def _fit_image_preserve_aspect(raw_img: Image.Image, target_w: int = 1080, target_h: int = 1920) -> Image.Image:
+    """متد ربات قبلی: کراپ هوشمند مرکز بدون کوچک‌ترین دفرمه شدن یا کشیدگی عرض/طول"""
+    img_w, img_h = raw_img.size
+    scale = max(target_w / img_w, target_h / img_h)
+    new_w = int(img_w * scale)
+    new_h = int(img_h * scale)
+    resized = raw_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    
+    # برش متمرکز روی بالای تصویر (تا سر کاراکترها و سوژه بریده نشود)
+    left = (new_w - target_w) // 2
+    top = int((new_h - target_h) * 0.15)
+    top = max(0, min(top, new_h - target_h))
+    return resized.crop((left, top, left + target_w, top + target_h))
+
+
 def _tokenize_text(text: str) -> list[tuple[str, bool]]:
-    """تجزیه متن به کلمات معمولی و کلمات هایلایت شده با **کلمه**"""
     tokens = []
     parts = re.split(r"(\*\*.*?\*\*)", text)
     for p in parts:
@@ -115,18 +130,15 @@ def _tokenize_text(text: str) -> list[tuple[str, bool]]:
 
 
 def _wrap_tokens(tokens: list[tuple[str, bool]], font: ImageFont.ImageFont, max_width_px: int) -> list[list[tuple[str, bool]]]:
-    """شکستن خطوط فارسی بر اساس عرض واقعی پیکسل‌ها"""
     lines = []
     current_line = []
     current_w = 0
-
     space_w = font.getbbox(" ")[2] - font.getbbox(" ")[0] if font else 10
 
     for word, is_hl in tokens:
         shaped = _shape_persian(word)
         bbox = font.getbbox(shaped) if font else (0, 0, len(word) * 12, 20)
         word_w = bbox[2] - bbox[0]
-
         add_w = word_w if not current_line else word_w + space_w
 
         if current_w + add_w <= max_width_px:
@@ -144,7 +156,6 @@ def _wrap_tokens(tokens: list[tuple[str, bool]], font: ImageFont.ImageFont, max_
 
 
 def _draw_rich_persian_line(draw: ImageDraw.ImageDraw, line_tokens: list[tuple[str, bool]], start_x: int, y: int, font: ImageFont.ImageFont, default_color: tuple, accent_color: tuple):
-    """رسم کلمات خط فارسی از راست به چپ با رنگ متمایز برای کلمات هایلایت شده"""
     cur_x = start_x
     space_w = font.getbbox(" ")[2] - font.getbbox(" ")[0] if font else 10
 
@@ -152,19 +163,17 @@ def _draw_rich_persian_line(draw: ImageDraw.ImageDraw, line_tokens: list[tuple[s
         shaped = _shape_persian(word)
         bbox = font.getbbox(shaped) if font else (0, 0, len(word) * 12, 20)
         word_w = bbox[2] - bbox[0]
-
         color = accent_color if is_hl else default_color
         draw.text((cur_x - word_w, y), shaped, fill=color, font=font)
         cur_x -= (word_w + space_w)
 
 
 def _draw_brush_background(draw: ImageDraw.ImageDraw, x1: int, y1: int, x2: int, y2: int, fill_color, stroke_color):
-    """ایجاد فرم آزاد ارگانیک شبیه پالت رنگ یا رد قلم‌مو برای پیج هنر"""
     points = [
-        (x1 + 30, y1), (x2 - 40, y1 + 10),
-        (x2, y1 + 60), (x2 - 15, y2 - 40),
-        (x2 - 60, y2), (x1 + 45, y2 - 10),
-        (x1, y2 - 70), (x1 + 15, y1 + 35)
+        (x1 + 35, y1), (x2 - 35, y1 + 8),
+        (x2, y1 + 45), (x2 - 15, y2 - 40),
+        (x2 - 45, y2), (x1 + 40, y2 - 10),
+        (x1, y2 - 50), (x1 + 15, y1 + 35)
     ]
     draw.polygon(points, fill=fill_color, outline=stroke_color)
 
@@ -174,61 +183,49 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
     theme = _get_theme(tag)
     tag_lower = (tag or "").lower()
     is_dark = tag_lower.startswith("d_") or "dark" in tag_lower
-    is_art = tag_lower in ("behind", "showcase", "workshop") or "art" in tag_lower
+    is_art = tag_lower.startswith("art_") or tag_lower in ("behind", "showcase", "workshop") or "art" in tag_lower
+    is_news = tag_lower == "t_news"
 
-    # ۱. بارگذاری تصویر تمام‌صفحه
     if art_path and os.path.exists(art_path) and os.path.getsize(art_path) > 500:
-        base_img = Image.open(art_path).convert("RGBA")
-        base_img = base_img.resize((1080, 1920), Image.Resampling.LANCZOS)
+        raw_img = Image.open(art_path).convert("RGBA")
+        base_img = _fit_image_preserve_aspect(raw_img, 1080, 1920)
     else:
         base_img = Image.new("RGBA", (1080, 1920), color=theme["glass_tint"][:3] + (255,))
 
     font_tag = _load_font(32)
-    font_head = _load_font(52)
-    font_body = _load_font(38)
+    font_head = _load_font(48)
+    font_body = _load_font(36)
+    font_news = _load_font(31)
     font_wm = _load_font(26)
 
     heading = str(story_obj.get("heading") or "نکته کلیدی").strip()
     body = str(story_obj.get("body") or "").strip()
     sticker = str(story_obj.get("sticker") or "").strip()
 
-    # جلوگیری از چاپ کلمات بدون فرمت
-    if "**" not in body:
-        words = body.split()
-        if len(words) >= 6:
-            words[1] = f"**{words[1]}**"
-            if len(words) > 10:
-                words[7] = f"**{words[7]}**"
-            body = " ".join(words)
-
-    # ------------------ استایل ۱: روانشناسی تاریک (بدون کادر، متن مستقیم، خط سرخ) ------------------
+    # استایل ۱: روانشناسی تاریک (بدون کادر، تصویر واضح، تیتر درشت با خط سرخ)
     if is_dark:
-        # گرادیان ملایم تیره در پایین تصویر بدون تاریکی شدید سوژه
         gradient = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
         d_grad = ImageDraw.Draw(gradient)
-        for y in range(850, 1920):
-            alpha = int(((y - 850) / 1070) ** 1.4 * 220)
-            d_grad.line([(0, y), (1080, y)], fill=(8, 6, 8, min(235, alpha)))
+        for y in range(900, 1920):
+            alpha = int(((y - 900) / 1020) ** 1.3 * 220)
+            d_grad.line([(0, y), (1080, y)], fill=(8, 6, 8, min(230, alpha)))
 
         final_canvas = Image.alpha_composite(base_img, gradient).convert("RGB")
         draw = ImageDraw.Draw(final_canvas)
 
-        # تیتر وسط‌چین درشت
         head_tokens = _tokenize_text(heading)
         head_lines = _wrap_tokens(head_tokens, font_head, max_width_px=920)
-        y_cursor = 1050
+        y_cursor = 1100
         for hline in head_lines[:2]:
             total_w = sum(font_head.getbbox(_shape_persian(w))[2] - font_head.getbbox(_shape_persian(w))[0] + 8 for w, _ in hline)
             start_x = 540 + (total_w // 2)
             _draw_rich_persian_line(draw, hline, start_x, y_cursor, font_head, (255, 255, 255), (239, 68, 68))
-            y_cursor += 75
+            y_cursor += 70
 
-        # خط باریک سرخ خونین زیر تیتر
         y_cursor += 15
         draw.line([(450, y_cursor), (630, y_cursor)], fill=(220, 38, 38), width=3)
-        y_cursor += 45
+        y_cursor += 40
 
-        # بدنه متن مستقیم روی تصویر
         body_tokens = _tokenize_text(body)
         body_lines = _wrap_tokens(body_tokens, font_body, max_width_px=920)
         for bline in body_lines[:6]:
@@ -237,21 +234,20 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
 
         draw.text((540, 1850), _shape_persian(theme["watermark"]), fill=(180, 50, 50), font=font_wm, anchor="ma")
 
-    # ------------------ استایل ۲: هنر و پاپیه‌ماشه (فرم براش و پالت کرم/سبز/نارنجی) ------------------
+    # استایل ۲: هنر پاپیه‌ماشه (فرم براش ارگانیک و پالت کرم/نارنجی/سبز)
     elif is_art:
         overlay = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
         d_overlay = ImageDraw.Draw(overlay)
-        # فرم براش با رنگ کرم گرم و خط سفالی
         _draw_brush_background(
-            d_overlay, 60, 1080, 1020, 1820,
-            fill_color=(247, 243, 236, 235),
+            d_overlay, 55, 1080, 1025, 1830,
+            fill_color=(247, 243, 236, 240),
             stroke_color=(217, 119, 6, 230)
         )
 
         final_canvas = Image.alpha_composite(base_img, overlay).convert("RGB")
         draw = ImageDraw.Draw(final_canvas)
 
-        tag_clean = TAG_LABELS_FA.get(tag, "هنر دست‌ساز")
+        tag_clean = TAG_LABELS_FA.get(tag, "کارگاه پاپیه‌ماشه")
         draw.text((940, 1130), _shape_persian(f"✦ {tag_clean}"), fill=(40, 90, 60), font=font_tag, anchor="ra")
 
         head_tokens = _tokenize_text(heading)
@@ -259,7 +255,7 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
         y_cursor = 1200
         for hline in head_lines[:2]:
             _draw_rich_persian_line(draw, hline, 940, y_cursor, font_head, (45, 30, 20), (194, 65, 12))
-            y_cursor += 70
+            y_cursor += 68
 
         y_cursor += 15
         draw.line([(140, y_cursor), (940, y_cursor)], fill=(180, 83, 9), width=2)
@@ -271,43 +267,58 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
             _draw_rich_persian_line(draw, bline, 940, y_cursor, font_body, (60, 45, 35), (194, 65, 12))
             y_cursor += 60
 
-        draw.text((540, 1855), _shape_persian(theme["watermark"]), fill=(180, 83, 9), font=font_wm, anchor="ma")
+        if sticker and y_cursor < 1720:
+            draw.rounded_rectangle([140, 1720, 940, 1800], radius=24, fill=(240, 230, 215, 230), outline=(194, 65, 12), width=2)
+            draw.text((540, 1740), _shape_persian(sticker[:45]), fill=(180, 83, 9), font=font_tag, anchor="ma")
 
-    # ------------------ استایل ۳: ترید (کادر شیشه‌ای بنفش و سبز نئونی محبوب) ------------------
+        draw.text((540, 1860), _shape_persian(theme["watermark"]), fill=(180, 83, 9), font=font_wm, anchor="ma")
+
+    # استایل ۳: ترید (کادر شیشه‌ای بنفش و سبز نئونی)
     else:
-        crop_box = (40, 1050, 1040, 1850)
+        crop_box = (40, 1040, 1040, 1850)
         lower_crop = base_img.crop(crop_box)
         blurred_lower = lower_crop.filter(ImageFilter.GaussianBlur(radius=25))
         base_img.paste(blurred_lower, crop_box)
 
         overlay = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
         d_overlay = ImageDraw.Draw(overlay)
-        d_overlay.rounded_rectangle([45, 1080, 1035, 1830], radius=42, fill=theme["glass_tint"], outline=theme["border"], width=3)
+        d_overlay.rounded_rectangle([45, 1070, 1035, 1835], radius=40, fill=theme["glass_tint"], outline=theme["border"], width=3)
 
         final_canvas = Image.alpha_composite(base_img, overlay).convert("RGB")
         draw = ImageDraw.Draw(final_canvas)
 
-        tag_clean = TAG_LABELS_FA.get(tag, tag.replace("_", " "))
-        draw.text((975, 1120), _shape_persian(f"• {tag_clean} •"), fill=theme["accent"], font=font_tag, anchor="ra")
+        tag_clean = TAG_LABELS_FA.get(tag, "تحلیل بازار")
+        draw.text((975, 1115), _shape_persian(f"• {tag_clean} •"), fill=theme["accent"], font=font_tag, anchor="ra")
 
         head_tokens = _tokenize_text(heading)
         head_lines = _wrap_tokens(head_tokens, font_head, max_width_px=880)
-        y_cursor = 1190
+        y_cursor = 1180
         for hline in head_lines[:2]:
             _draw_rich_persian_line(draw, hline, 975, y_cursor, font_head, theme["text"], theme["accent"])
-            y_cursor += 72
+            y_cursor += 68
 
-        y_cursor += 15
+        y_cursor += 12
         draw.line([(105, y_cursor), (975, y_cursor)], fill=theme["border"][:3], width=2)
-        y_cursor += 30
+        y_cursor += 25
 
-        body_tokens = _tokenize_text(body)
-        body_lines = _wrap_tokens(body_tokens, font_body, max_width_px=890)
-        for bline in body_lines[:5]:
-            _draw_rich_persian_line(draw, bline, 975, y_cursor, font_body, theme["sub"], theme["accent"])
-            y_cursor += 62
+        if is_news and ("\n" in body or "•" in body):
+            lines = [ln.strip() for ln in body.split("\n") if ln.strip()]
+            for item in lines[:5]:
+                clean_item = item if item.startswith("•") else f"• {item}"
+                item_tokens = _tokenize_text(clean_item)
+                item_wrapped = _wrap_tokens(item_tokens, font_news, max_width_px=880)
+                for wln in item_wrapped:
+                    _draw_rich_persian_line(draw, wln, 975, y_cursor, font_news, theme["sub"], theme["accent"])
+                    y_cursor += 48
+                y_cursor += 8
+        else:
+            body_tokens = _tokenize_text(body)
+            body_lines = _wrap_tokens(body_tokens, font_body, max_width_px=890)
+            for bline in body_lines[:5]:
+                _draw_rich_persian_line(draw, bline, 975, y_cursor, font_body, theme["sub"], theme["accent"])
+                y_cursor += 60
 
-        if sticker:
+        if sticker and y_cursor < 1720:
             draw.rounded_rectangle([140, 1720, 940, 1800], radius=24, fill=(10, 10, 15, 180), outline=theme["accent"], width=2)
             draw.text((540, 1740), _shape_persian(sticker[:45]), fill=theme["accent"], font=font_tag, anchor="ma")
 
@@ -318,20 +329,20 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
 
 
 def render_carousel(brand, slides, out_dir, bgs, logo, arts=None, slug="trading"):
-    """رندر کاروسل با تصویر تمام‌صفحه و باکس شیشه‌ای بلور در پایین اسلایدها"""
     os.makedirs(out_dir, exist_ok=True)
     theme = _get_theme(slug)
-    font_head = _load_font(48)
-    font_body = _load_font(38)
+    font_head = _load_font(46)
+    font_body = _load_font(36)
     font_wm = _load_font(26)
 
     paths = []
     for i, s in enumerate(slides):
         p = os.path.join(out_dir, f"slide_{i+1:02d}.jpg")
-
         art_path = arts[i] if (arts and i < len(arts)) else None
+
         if art_path and os.path.exists(art_path) and os.path.getsize(art_path) > 500:
-            base_img = Image.open(art_path).convert("RGBA").resize((1080, 1350), Image.Resampling.LANCZOS)
+            raw_img = Image.open(art_path).convert("RGBA")
+            base_img = _fit_image_preserve_aspect(raw_img, 1080, 1350)
         else:
             base_img = Image.new("RGBA", (1080, 1350), color=theme["glass_tint"][:3] + (255,))
 
@@ -355,28 +366,19 @@ def render_carousel(brand, slides, out_dir, bgs, logo, arts=None, slug="trading"
         y_c = 770
         for hl in head_lines[:2]:
             _draw_rich_persian_line(draw, hl, 975, y_c, font_head, theme["text"], theme["accent"])
-            y_c += 68
+            y_c += 64
 
-        y_c += 15
+        y_c += 12
         draw.line([(95, y_c), (975, y_c)], fill=theme["border"][:3], width=2)
-        y_c += 25
-
-        if "**" not in body:
-            words = body.split()
-            if len(words) >= 5:
-                words[1] = f"**{words[1]}**"
-                if len(words) > 12:
-                    words[7] = f"**{words[7]}**"
-                body = " ".join(words)
+        y_c += 22
 
         body_tokens = _tokenize_text(body)
         body_lines = _wrap_tokens(body_tokens, font_body, max_width_px=890)
         for bl in body_lines[:5]:
             _draw_rich_persian_line(draw, bl, 975, y_c, font_body, theme["sub"], theme["accent"])
-            y_c += 58
+            y_c += 56
 
         draw.text((540, 1315), _shape_persian(f"{theme['watermark']}  •  {i+1}/{len(slides)}"), fill=theme["accent"], font=font_wm, anchor="ma")
-
         final_canvas.save(p, quality=94)
         paths.append(p)
     return paths
