@@ -1,33 +1,45 @@
+```python
 """
 ماژول تنظیمات مرکزی آژانس هوشمند دستیار ویرا
-توسعه‌دهنده: حسین داودیان
+پشتیبانی همزمان از Gemini, NVIDIA, Cloudflare و HuggingFace از روی متغیرهای Render
 """
 import os
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
+
+def _clean_env(keys: tuple[str, ...], default: str = "") -> str:
+    for k in keys:
+        val = os.getenv(k, "")
+        if val:
+            cleaned = val.strip().strip('"').strip("'").replace(" ", "")
+            if cleaned:
+                return cleaned
+    return default
+
+
 @dataclass
 class AgencyConfig:
     bot_name: str = "دستیار ویرا"
     creator_name: str = "حسین داودیان"
-    
-    # خواندن مستقیم توکن تلگرام از رندر
-    telegram_token: str = field(default_factory=lambda: (
-        os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or ""
-    ).strip())
-    
-    # خواندن آیدی ادمین
-    owner_id: int = field(default_factory=lambda: int(
-        (os.getenv("TELEGRAM_OWNER_ID") or os.getenv("OWNER_ID") or "0").strip() or "0"
-    ))
-    
+
+    telegram_token: str = field(default_factory=lambda: _clean_env(("TELEGRAM_BOT_TOKEN", "BOT_TOKEN")))
+    owner_id: int = field(default_factory=lambda: int(_clean_env(("TELEGRAM_OWNER_ID", "OWNER_ID"), "0") or "0"))
     db_path: str = field(default_factory=lambda: os.getenv("VIRA_DB_PATH", "data/vira_agency.db"))
-    
-    # خواندن مستقیم و بدون واسطه کلید جمینای از پنل رندر
-    gemini_api_key: str = field(default_factory=lambda: (
-        os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GENAI_API_KEY") or ""
-    ).strip())
-    
+
+    # کلیدهای هوش مصنوعی موجود در پنل رندر شما
+    gemini_api_key: str = field(default_factory=lambda: _clean_env(("GEMINI_API_KEY", "GOOGLE_API_KEY", "GENAI_API_KEY")))
+    nvidia_api_key: str = field(default_factory=lambda: _clean_env(("NVIDIA_API_KEY",)))
+    cf_account_id: str = field(default_factory=lambda: _clean_env(("CLOUDFLARE_ACCOUNT_ID", "CF_ACCOUNT_ID")))
+    cf_api_token: str = field(default_factory=lambda: _clean_env(("CLOUDFLARE_API_TOKEN", "CF_API_TOKEN")))
+    hf_token: str = field(default_factory=lambda: _clean_env(("HF_TOKEN", "HUGGINGFACE_TOKEN")))
+
     tz_name: str = field(default_factory=lambda: os.getenv("TZ", "Asia/Tehran"))
 
     @property
@@ -37,4 +49,10 @@ class AgencyConfig:
         except Exception:
             return ZoneInfo("UTC")
 
-VIRA_SYSTEM_IDENTITY = "تو دستیار ویرا هستی؛ مدیرعامل هوشمند آژانس دیجیتال مارکتینگ."
+
+VIRA_SYSTEM_IDENTITY = (
+    "تو «دستیار ویرا» (Vira) هستی؛ مدیرعامل هوشمند آژانس دیجیتال مارکتینگ. "
+    "نام سازنده‌ات «حسین داودیان» است، اما فقط در صورت پرسش مستقیم آن را اعلام می‌کنی. "
+    "لحن صحبت تو صمیمی، بامزه، باهوش و حرفه‌ای است."
+)
+```
