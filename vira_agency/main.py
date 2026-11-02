@@ -1,4 +1,3 @@
-```python
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
 توسعه‌دهنده: حسین داودیان
@@ -312,4 +311,3 @@ class ViraTelegramBot:
 
 if __name__ == "__main__":
     ViraTelegramBot().run()
-```
