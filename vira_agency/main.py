@@ -1,7 +1,6 @@
-
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
-متصل به واحد تحلیل زنده بازار کریپتو و سیستم رندر گرافیکی استوری، کاروسل و ریلز
+ارائه‌دهنده تحلیل‌های واقعی با اعداد لحظه‌ای بازار کریپتو و عناوین ۱۰۰٪ فارسی
 """
 import asyncio
 import logging
@@ -23,77 +22,77 @@ logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", 
 log = logging.getLogger("vira_agency")
 
 STORY_CATS_CONFIG = {
-    # پیج ترید
+    # ترید
     "t_market": {
         "title": "📈 تحلیل بازار و وضعیت بیت‌کوین",
-        "desc": "با توجه به قیمت و تغییرات لحظه‌ای بازار، یک تحلیل صریح درباره محدوده نقدینگی، حمایت و مقاومت و استراتژی ورود بنویس.",
-        "visual": "Professional trader in a dark cybernetic room glowing with deep royal purple and neon emerald candlestick charts on multiple screens, cinematic 8k, no text"
+        "tag_fa": "تحلیل بازار",
+        "visual": "Professional crypto trader in a dark cybernetic command center with illuminated royal purple and neon emerald charts, cinematic 8k, no text"
     },
     "t_news": {
-        "title": "📰 اخبار زنده فارکس و کریپتو",
-        "desc": "یک خبر داغ و اضطراری از نوسانات لحظه‌ای و تحرکات نهنگ‌های مارکت بنویس.",
-        "visual": "Illuminated financial news terminal in a royal purple glowing room with volatile neon market data feeds, cyberpunk style, no text"
+        "title": "📰 اخبار داغ و رویدادهای زنده",
+        "tag_fa": "اخبار داغ",
+        "visual": "Futuristic neon media room displaying breaking economic and cryptocurrency data with glowing royal purple screens, no text"
     },
     "t_quiz": {
         "title": "⚡ کوییز تریدری (اینجا وارد شویم؟)",
-        "desc": "یک دوراهی چالش‌برانگیز بین ورود به پوزیشن یا صبر کردن به همراه دلیل تکنیکال طرح کن.",
+        "tag_fa": "کوییز تریدری",
         "visual": "Close-up of a complex breakout trading chart glowing in vibrant royal purple and neon green, dramatic lighting, no text"
     },
     "t_psyc": {
         "title": "🧠 روانشناسی ترید و کنترل طمع",
-        "desc": "یک هشدار روانشناسی ترید برای جلوگیری از طمع، اورترید (Overtrading) و انتقام از مارکت بنویس.",
+        "tag_fa": "روانشناسی ترید",
         "visual": "A disciplined trader sitting calmly in front of neon purple charts with a glowing golden aura of focus, cinematic art, no text"
     },
     "t_hunt": {
         "title": "🎯 هشدار تله نقدینگی و استاپ‌هانت",
-        "desc": "توضیح بده که چطور مارکت‌میکرها قبل از حرکت اصلی، حد ضررهای خریداران و فروشندگان هیجانی را جارو می‌کنند.",
+        "tag_fa": "شکار استاپ",
         "visual": "Glowing cybernetic liquidity trap catching retail positions on a futuristic royal purple holographic trading chart, no text"
     },
     "t_bull": {
         "title": "🐂 نبرد حماسی گاو و خرس",
-        "desc": "روایت جنگ خریداران و فروشندگان در سنگر قیمتی امروز با لحنی پرهیجان و تحلیلی.",
+        "tag_fa": "نبرد گاو و خرس",
         "visual": "Epic clash of a glowing royal purple metallic Bull and an emerald green Bear amidst stormy trading charts, 8k masterpiece, no text"
     },
-    # پیج روانشناسی تاریک
+    # روانشناسی تاریک
     "d_chal": {
         "title": "🔥 چالشی و دو راهی اخلاقی (شوالیه)",
-        "desc": "یک دوراهی اخلاقی و چالش رفتاری عمیق درباره قدرت، سکوت یا انتقام طراحی کن.",
+        "tag_fa": "چالش روز",
         "visual": "A solitary dark knight standing before a gloomy gothic castle under a crimson blood moon, dark oil painting masterpiece, no text"
     },
     "d_edu": {
         "title": "🧠 پند رابطه و روباه مکار",
-        "desc": "ترفندی عمیق برای تشخیص لبخندهای فریبنده و رفتارهای چاپلوسانه در روابط کاری و شخصی بنویس.",
+        "tag_fa": "ترفند تاریک",
         "visual": "A cunning fox wearing a mysterious theatrical mask in a shadowy forest, dark gothic oil painting with crimson shadows, no text"
     },
     "d_mar": {
         "title": "💍 رازهای تاریک روابط (گرگ)",
-        "desc": "روشی قاطع برای حفظ استقلال عاطفی و نشکستن حریم شخصی در برابر افراد کنترل‌گر بنویس.",
+        "tag_fa": "قوانین رابطه",
         "visual": "A majestic grey wolf standing alone on a snowy cliff under starry night, dark gothic oil painting, chiaroscuro lighting, no text"
     },
     "d_opt": {
         "title": "🎭 تست شخصیت (مسیر تاریک)",
-        "desc": "یک تست روانشناسی دوراهی: وفاداری خطرناک یا هوشمندی بی‌رحمانه؟",
+        "tag_fa": "تست شخصیت",
         "visual": "Two distinct symbolic paths diverging in a dark gothic forest leading to a glowing crimson castle, dark oil painting, no text"
     },
     "d_sec": {
         "title": "🩸 راز زبان بدن (کنت دراکولا)",
-        "desc": "رمزگشایی از جهت مردمک چشم و مکث در کلام برای کشف افکار واقعی طرف مقابل.",
+        "tag_fa": "زبان بدن",
         "visual": "Aristocratic Count Dracula in a deep charcoal coat with crimson lining staring intensely, dark gothic oil painting, no text"
     },
-    # پیج پاپیه‌ماشه
+    # پاپیه‌ماشه
     "behind": {
         "title": "📲 استوری فروش و پشت صحنه",
-        "desc": "روایتی گرم و جذاب از حس لطیف ساخت اثر با دست و دعوت به ثبت سفارش اختصاصی.",
+        "tag_fa": "پشت صحنه",
         "visual": "Artisan hands sculpting a minimalist paper mache sculpture in a sunlit warm studio, cream and terracotta tones, no text"
     },
     "showcase": {
         "title": "🖼️ معرفی اثر جدید و جزئیات دکور",
-        "desc": "توصیف حس آرامش و بافت ارگانیک مجسمه در هماهنگی با چیدمان خانه مدرن.",
+        "tag_fa": "معرفی اثر",
         "visual": "Minimalist luxury home decor shelf with a textured handmade paper mache sculpture, warm morning sunlight, cream palette, no text"
     },
     "workshop": {
         "title": "🛠️ آموزش تکنیک خمیر و چسب",
-        "desc": "نکته‌ای طلایی درباره مقاومت سازه، جلوگیری از ترک و سنباده‌زنی بی‌نقص.",
+        "tag_fa": "نکته کارگاه",
         "visual": "Close-up of artistic paper mache clay texture and wooden sculpting tools on a warm linen table, natural lighting, no text"
     },
 }
@@ -182,38 +181,46 @@ class ViraTelegramBot:
         cat = STORY_CATS_CONFIG.get(cat_key, STORY_CATS_CONFIG["t_market"])
         slug = page["slug"]
 
-        market_info = ""
-        if slug == "trading":
-            market_info = await get_live_market_summary()
+        m = await get_live_market_summary() if slug == "trading" else {}
 
-        prompt = (
-            f"تو کارشناس ارشد محتوا برای پیج «{page['title']}» هستی.\n"
-            f"سبک استوری: {cat['title']}\n"
-            f"دستور کار: {cat['desc']}\n"
-            f"{market_info}\n"
-            "مهم‌ترین قانون: فقط و فقط یک فرمت JSON معتبر فارسی شامل موارد زیر تولید کن. هیچ کلمه انگلیسی یا دستور تکراری ننویس:\n"
-            '{"heading": "تیتر جذاب فارسی حداکثر ۵ کلمه", "body": "متن تخصصی و صریح فارسی در ۲ الی ۳ جمله", "sticker": "سوال تعاملی کوتاه"}'
-        )
+        # تولید متن دقیق بر اساس داده‌های لحظه‌ای بازار
+        if cat_key == "t_market":
+            heading = f"تحلیل بیت‌کوین در {m.get('price', '67,000')}$"
+            body = (
+                f"بیت‌کوین در ۲۴ ساعت اخیر با نوسان {m.get('change', '0%')} در وضعیت {m.get('trend')} قرار دارد. "
+                f"حمایت معتبر روی ${m.get('support')} و مقاومت کلیدی روی ${m.get('resistance')} است؛ "
+                f"ورود مطمئن صرفاً با شکست این سقف یا پولبک به کف تایید می‌شود."
+            )
+            sticker = "خرید در کف یا شکست سقف؟"
 
-        story_data = await self.llm.json(prompt, temperature=0.7)
-        heading = str(story_data.get("heading") or "").strip()
-        body = str(story_data.get("body") or "").strip()
-        sticker = str(story_data.get("sticker") or "تحلیل تو چیه؟").strip()
+        elif cat_key == "t_news":
+            heading = "رویدادهای داغ بازار کریپتو"
+            body = (
+                f"آخرین تحولات اقتصادی و مارکت: {m.get('news')[:120]}... "
+                f"نوسانات با ثبت بالاترین قیمت ۲۴ساعته در ${m.get('high')} و کف ${m.get('low')} همراه بوده است؛ "
+                f"معامله‌گران باید ریسک فیوچرز را به شدت کنترل کنند."
+            )
+            sticker = "بازار پامپ میشه یا دامپ؟"
 
-        # فیلتر امنیتی: اگر به هر دلیلی متن هنوز حاوی عبارات انگلیسی مدل بود، جایگزینی هوشمند فارسی
-        if not body or "Professional Persian" in body or len(body) < 15:
-            if slug == "trading":
-                heading = "نوسان شدید در محدوده نقدینگی"
-                body = "بیت‌کوین در تلاش برای شکست مقاومت کلیدی است. مراقب تله‌های نقدینگی و ورودهای هیجانی در سقف باشید؛ تاییدیه کندلی شرط اول معامله است."
-                sticker = "لانگ می‌گیری یا شورت؟"
-            elif slug == "dark_psych":
-                heading = "سکوت؛ قوی‌ترین سلاح اقتدار"
-                body = "کسی که تمام برگ‌های برنده‌اش را در مکالمه اول رو می‌کند، پیش از آغاز بازی مات شده است. رازهایت را حتی در صمیمی‌ترین جمع‌ها فاش نکن."
-                sticker = "موافقی با این استراتژی؟"
-            else:
-                heading = "هنر خلق روح در کاغذ و آب"
-                body = "هر مجسمه سفری است از تکه‌های باطله تا فرمی ماندگار بر روی میز شما. اصالت دست‌ساز تکرارناپذیر است."
-                sticker = "سفارش یا آموزش؟"
+        elif slug == "trading":
+            prompt = (
+                f"یک استوری ترید کوتاه و کوبنده فارسی در موضوع {cat['title']} بر اساس بیت‌کوین ${m.get('price')} بنویس.\n"
+                'فقط این ساختار JSON: {"heading": "تیتر جذاب فارسی", "body": "متن تخصصی فارسی", "sticker": "سوال نظرسنجی"}'
+            )
+            data = await self.llm.json(prompt, temperature=0.7)
+            heading = str(data.get("heading") or cat["tag_fa"])
+            body = str(data.get("body") or f"بیت‌کوین در محدوده ${m.get('price')} در حال تثبیت است؛ حد ضرر فراموش نشود.")
+            sticker = str(data.get("sticker") or "تحلیل تو چیه؟")
+
+        else:
+            prompt = (
+                f"یک استوری جذاب و اختصاصی فارسی برای پیج «{page['title']}» در سبک {cat['title']} بساز.\n"
+                'فقط ساختار JSON: {"heading": "تیتر فارسی", "body": "متن جذاب فارسی", "sticker": "سوال تعاملی"}'
+            )
+            data = await self.llm.json(prompt, temperature=0.7)
+            heading = str(data.get("heading") or cat["tag_fa"])
+            body = str(data.get("body") or "اصالت و جذابیت در تک تک جزئیات خلق شده است.")
+            sticker = str(data.get("sticker") or "نظر تو چیه؟")
 
         out_dir = f"data/outputs/{page['id']}/story_{int(time.time())}"
         os.makedirs(out_dir, exist_ok=True)
@@ -226,34 +233,6 @@ class ViraTelegramBot:
         render_story(None, story_obj, out_path, 0, [], None, cat_key, art_path if img_ok else None)
 
         return out_path, heading, body
-
-    async def _build_carousel(self, page: dict, topic: str) -> tuple[list[str], str]:
-        slug = page["slug"]
-        market_info = await get_live_market_summary() if slug == "trading" else ""
-        prompt = (
-            f"برای پیج «{page['title']}» درباره «{topic}» یک کاروسل ۴ اسلایدی فارسی بساز.\n"
-            f"{market_info}\n"
-            "فقط JSON استاندارد:\n"
-            '{"slides": [{"heading": "تیتر فارسی", "body": "متن فارسی", "visual": "English visual prompt"}], "caption": "کپشن کامل فارسی با هشتگ"}'
-        )
-        data = await self.llm.json(prompt, temperature=0.7)
-        slides = data.get("slides") or [
-            {"heading": topic, "body": "بررسی مهم‌ترین زوایای این موضوع و نکات کلیدی برای پیاده‌سازی.", "visual": "cinematic conceptual 8k art, no text"}
-        ]
-        caption = str(data.get("caption") or f"✨ کاروسل تخصصی: {topic}")
-
-        out_dir = f"data/outputs/{page['id']}/carousel_{int(time.time())}"
-        os.makedirs(out_dir, exist_ok=True)
-
-        arts = []
-        for i, s in enumerate(slides[:5]):
-            art_file = os.path.join(out_dir, f"art_{i}.jpg")
-            v_prompt = s.get("visual") or "cinematic digital art masterpiece, no text"
-            ok = await self.llm.generate_image(v_prompt, art_file)
-            arts.append(art_file if ok else None)
-
-        files = await asyncio.to_thread(render_carousel, None, slides[:5], out_dir, [], None, arts, slug)
-        return files, caption
 
     async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         q = update.callback_query
@@ -292,7 +271,7 @@ class ViraTelegramBot:
             _, cat_key, slug = data.split(":")
             page = self.db.get_page_by_slug(slug)
             if page:
-                await q.edit_message_text(f"⏳ دستیار ویرا در حال رصد بازار، تصویرسازی و ساخت استوری برای «{page['title']}»...")
+                await q.edit_message_text(f"⏳ دستیار ویرا در حال استعلام داده‌های زنده و ساخت استوری برای «{page['title']}»...")
                 out_path, heading, body = await self._build_single_story(page, cat_key)
                 self.db.save_content(page["id"], "story", heading, {"body": body, "file": out_path})
 
@@ -306,14 +285,17 @@ class ViraTelegramBot:
 
         elif data == "dept:trading:market_pulse":
             await q.edit_message_text("⏳ در حال استعلام آخرین داده‌های قیمت و اخبار زنده کریپتو...")
-            summary = await get_live_market_summary()
-            ans = await self.llm.generate_text(
-                f"با توجه به این داده‌های زنده بازار:\n{summary}\nیک گزارش کوتاه، جذاب، حرفه‌ای و کاربردی با لحن قاطع تریدری برای استوری یا کپشن تلگرام بنویس.",
-                VIRA_SYSTEM_IDENTITY,
-                "trading",
+            m = await get_live_market_summary()
+            msg_text = (
+                f"📊 **نبض لحظه‌ای مارکت بیت‌کوین:**\n\n"
+                f"💵 قیمت لحظه‌ای: **${m.get('price')}**\n"
+                f"📈 نوسان ۲۴ساعته: **{m.get('change')}**\n"
+                f"🔍 وضعیت بازار: **{m.get('trend')}**\n"
+                f"🛡️ حمایت معتبر: **${m.get('support')}**\n"
+                f"🎯 مقاومت کلیدی: **${m.get('resistance')}**\n\n"
+                f"📰 **اخبار و رویدادها:**\n{m.get('news')}"
             )
-            msg_text = f"📊 **نبض لحظه‌ای مارکت:**\n\n{summary}\n\n💡 **تحلیل دستیار ویرا:**\n{ans}"
-            await q.message.reply_text(msg_text, reply_markup=self._main_menu())
+            await q.message.reply_text(msg_text, reply_markup=self._main_menu(), parse_mode="Markdown")
 
         elif data == "dept:papermache:idea_hub":
             kb = [
@@ -349,29 +331,17 @@ class ViraTelegramBot:
         if active_task:
             context.user_data.pop("vira_task", None)
             slug = active_task.get("slug", "trading")
-            kind = active_task.get("kind", "carousel")
             page = self.db.get_page_by_slug(slug)
 
-            if kind == "carousel":
-                wait = await msg.reply_text(f"⏳ در حال ساخت تصاویر هوش مصنوعی و طراحی کاروسل برای «{user_text}»...")
-                files, caption = await self._build_carousel(page, user_text)
-                await wait.delete()
-                for fpath in files:
-                    with open(fpath, "rb") as ph:
-                        await msg.reply_photo(photo=ph)
-                await msg.reply_text(caption[:950], reply_markup=self._department_menu(page))
-                return
-
-            else:
-                wait = await msg.reply_text("⏳ در حال آماده‌سازی پاسخ تخصصی...")
-                ans = await self.llm.generate_text(
-                    f"به عنوان مشاور متخصص برای پیج {page['title']} به این سوال یا موضوع پاسخ کامل فارسی بده: {user_text}",
-                    VIRA_SYSTEM_IDENTITY,
-                    slug,
-                )
-                await wait.delete()
-                await msg.reply_text(ans, reply_markup=self._department_menu(page))
-                return
+            wait = await msg.reply_text("⏳ در حال آماده‌سازی پاسخ تخصصی...")
+            ans = await self.llm.generate_text(
+                f"به عنوان مشاور متخصص برای پیج {page['title']} به این سوال یا موضوع پاسخ کامل فارسی بده: {user_text}",
+                VIRA_SYSTEM_IDENTITY,
+                slug,
+            )
+            await wait.delete()
+            await msg.reply_text(ans, reply_markup=self._department_menu(page))
+            return
 
         wait = await msg.reply_text("🤔 ...")
         reply = await self.ceo.chat_with_vira(user_text)
