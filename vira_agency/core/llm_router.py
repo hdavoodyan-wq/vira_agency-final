@@ -1,5 +1,5 @@
 """
-سیستم جامع هوشمند و چندموتوره (Multi-Tier Fallback LLM & Image Router)
+مسیریاب هوشمند LLM - نسخه نهایی بدون مدل‌های منسوخ‌شده و خطای 404
 """
 import asyncio
 import base64
@@ -27,17 +27,15 @@ class LLMRouter:
         if not api_key:
             return "⚠️ خطا: کلید GEMINI_API_KEY در تنظیمات سرور ثبت نشده است."
 
-        # لیست مدل‌ها به ترتیب اولویت: از قوی‌ترین و جدیدترین تا مدل‌های پشتیبان پایدار
+        # استفاده فقط از مدل‌های کاملاً پایدار، فعال و بدون ارور ۴۰۴
         models_to_try = [
             "gemini-2.5-flash",
             "gemini-1.5-flash",
-            "gemini-1.5-pro",
-            "gemini-pro"
+            "gemini-1.5-pro"
         ]
 
         last_err = ""
         for model_name in models_to_try:
-            # استفاده از اندپوینت رسمی و پایدار v1
             url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key}"
             payload = {
                 "contents": [{"parts": [{"text": full_prompt}]}],
@@ -51,7 +49,7 @@ class LLMRouter:
                         headers={"Content-Type": "application/json"},
                         method="POST",
                     )
-                    with urllib.request.urlopen(req, timeout=30) as resp:
+                    with urllib.request.urlopen(req, timeout=45) as resp:
                         return json.loads(resp.read().decode("utf-8"))
 
                 data = await asyncio.to_thread(_call)
@@ -67,28 +65,17 @@ class LLMRouter:
             except urllib.error.HTTPError as he:
                 err_body = he.read().decode("utf-8", errors="ignore")
                 last_err = f"{model_name} (HTTP {he.code})"
-                log.warning("Model %s failed: %s. Automatically switching to next model...", model_name, err_body[:100])
+                log.warning("Model %s failed: %s. Trying next...", model_name, err_body[:100])
                 continue
             except Exception as e:
                 last_err = f"{model_name} ({str(e)})"
-                log.warning("Model %s error: %s. Automatically switching to next model...", model_name, e)
+                log.warning("Model %s error: %s. Trying next...", model_name, e)
                 continue
 
-        return f"⚠️ خطای سیستم هوش مصنوعی: تمامی مدل‌های جمینای بررسی شدند. آخرین خطا: {last_err}"
+        return f"⚠️ خطای API جمینای: تمامی مدل‌ها بررسی شدند. آخرین خطا: {last_err}"
 
     async def generate_image(self, prompt: str, output_path: str) -> bool:
-        """سیستم جامع دو‌مرحله‌ای تولید تصویر با فال‌بک خودکار (جمینای ➡️ کلودفلر)"""
-        
-        # ۱. تلاش اول با سرویس هوش مصنوعی جمینای (اگر پشتیبانی شود)
-        try:
-            api_key = getattr(self.cfg, "gemini_api_key", "")
-            if api_key:
-                # پردازش پرامپت تصویر
-                pass
-        except Exception as e:
-            log.warning("Gemini image generation step skipped: %s", e)
-
-        # ۲. تلاش دوم و قطعی: موتور ابری کلودفلر (Cloudflare Workers AI - Flux)
+        """سیستم تولید تصویر با فال‌بک خودکار روی کلودفلر (Flux)"""
         cf_account = getattr(self.cfg, "cf_account_id", "")
         cf_token = getattr(self.cfg, "cf_api_token", "")
 
@@ -107,7 +94,7 @@ class LLMRouter:
                 )
                 
                 def _call_cf():
-                    with urllib.request.urlopen(req, timeout=45) as resp:
+                    with urllib.request.urlopen(req, timeout=60) as resp:
                         return resp.read()
 
                 img_bytes = await asyncio.to_thread(_call_cf)
