@@ -1,3 +1,6 @@
+"""
+ماژول دیتابیس آژانس ویرا با متد کامل بررسی موضوعات اخیر (Anti-Duplication)
+"""
 import json
 import os
 import sqlite3
@@ -64,7 +67,7 @@ class AgencyDatabase:
             default_pages = [
                 ("trading", "📈 ترید و بازارهای مالی", "Trading Dept", "ترید، کریپتو و فارکس", "@tradebazehn", "حرفه‌ای، تحلیلی و قاطع", "{}", now),
                 ("dark_psych", "🖤 روانشناسی تاریک", "Dark Psych Dept", "روانشناسی تاریک و کاریزما", "@tradebazehn", "عمیق، مرموز و فلسفی", "{}", now),
-                ("papermache", "🎨 هنر و مجسمه‌سازی پاپیه‌ماشه", "Art Dept", "ساخت و فروش مجسمه‌های دست‌ساز پاپیه‌ماشه", "@papermache_art", "گرم، صمیمی، شاعرانه و هنرمندانه", "{}", now),
+                ("papermache", "🎨 هنر و مجسمه‌سازی پاپیه‌ماشه", "Art Dept", "ساخت و فروش مجسمه‌های دست‌ساز پاپیه‌ماشه", "@papermache_art", "گرم، صمیمی و هنرمندانه", "{}", now),
             ]
             conn.executemany(
                 "INSERT INTO brand_pages (slug, title, department, niche, handle, tone, visual_identity, created_at) VALUES (?,?,?,?,?,?,?,?)",
@@ -80,6 +83,15 @@ class AgencyDatabase:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM brand_pages WHERE slug=?", (slug,)).fetchone()
             return dict(row) if row else None
+
+    def get_recent_topics(self, page_id: int, limit: int = 30) -> list[str]:
+        """دریافت موضوعات ۳۰ روز گذشته برای جلوگیری از تکرار محتوا"""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT topic FROM page_contents WHERE page_id=? ORDER BY id DESC LIMIT ?",
+                (page_id, limit),
+            ).fetchall()
+            return [r["topic"] for r in rows if r["topic"]]
 
     def save_content(self, page_id: int, content_type: str, topic: str, payload: dict, category: str = "") -> int:
         with self._conn() as conn:
