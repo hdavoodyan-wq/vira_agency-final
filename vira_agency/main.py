@@ -53,33 +53,35 @@ STORY_CATS_CONFIG = {
         "tag_fa": "نبرد گاو و خرس",
         "visual": "Epic clash of a glowing royal purple metallic Bull and an emerald green Bear amidst stormy trading charts, 8k masterpiece, no text"
     },
-    # روانشناسی تاریک
+
+    # روانشناسی تاریک (تطابق کامل شخصیت‌ها با متن)
     "d_chal": {
-        "title": "🔥 چالشی و دو راهی اخلاقی (شوالیه)",
-        "tag_fa": "چالش روز",
-        "visual": "A solitary dark knight standing before a gloomy gothic castle under a crimson blood moon, dark oil painting masterpiece, no text"
+        "title": "🔥 دوراهی شوالیه تاریک",
+        "tag_fa": "چالش شوالیه",
+        "visual": "A solitary dark knight with ornate black armor standing before a gloomy gothic castle under a crimson blood moon, cinematic lighting, no text"
     },
     "d_edu": {
-        "title": "🧠 پند رابطه و روباه مکار",
-        "tag_fa": "ترفند تاریک",
-        "visual": "A cunning fox wearing a mysterious theatrical mask in a shadowy forest, dark gothic oil painting with crimson shadows, no text"
+        "title": "🦊 فریب و مکر (روباه نقاب‌دار)",
+        "tag_fa": "روباه مکار",
+        "visual": "A cunning anthropomorphic fox wearing an ornate Venetian mask in a misty gothic street, crimson shadows, dark oil painting, no text"
     },
     "d_mar": {
-        "title": "💍 رازهای تاریک روابط (گرگ)",
-        "tag_fa": "قوانین رابطه",
-        "visual": "A majestic grey wolf standing alone on a snowy cliff under starry night, dark gothic oil painting, chiaroscuro lighting, no text"
+        "title": "🐺 استقلال عاطفی (گرگ خاکستری)",
+        "tag_fa": "گرگ تنها",
+        "visual": "A majestic silver-grey wolf standing proud on a rocky cliff under a glowing crimson moon, cinematic chiaroscuro, no text"
     },
     "d_opt": {
-        "title": "🎭 تست شخصیت (مسیر تاریک)",
-        "tag_fa": "تست شخصیت",
-        "visual": "Two distinct symbolic paths diverging in a dark gothic forest leading to a glowing crimson castle, dark oil painting, no text"
+        "title": "🥀 اغواگری و جذابیت زنانه (بانوی مرموز)",
+        "tag_fa": "راز کاریزما",
+        "visual": "A breathtaking seductive aristocratic gothic woman in an elegant velvet gown, mysterious captivating eyes, dark baroque chamber, no text"
     },
     "d_sec": {
-        "title": "🩸 راز زبان بدن (کنت دراکولا)",
-        "tag_fa": "زبان بدن",
-        "visual": "Aristocratic Count Dracula in a deep charcoal coat with crimson lining staring intensely, dark gothic oil painting, no text"
+        "title": "🩸 نفوذ و هیپنوتیزم (کنت دراکولا)",
+        "tag_fa": "زبان بدن دراکولا",
+        "visual": "Aristocratic Count Dracula in a charcoal tailored coat with crimson lining staring intensely with piercing hypnotic gaze, dark gothic art, no text"
     },
-    # پاپیه‌ماشه
+
+    # هنر و پاپیه‌ماشه
     "behind": {
         "title": "📲 استوری فروش و پشت صحنه",
         "tag_fa": "پشت صحنه",
@@ -183,7 +185,6 @@ class ViraTelegramBot:
 
         m = await get_live_market_summary() if slug == "trading" else {}
 
-        # تولید متن دقیق بر اساس داده‌های لحظه‌ای بازار
         if cat_key == "t_market":
             heading = f"تحلیل بیت‌کوین در {m.get('price', '67,000')}$"
             body = (
@@ -195,32 +196,48 @@ class ViraTelegramBot:
 
         elif cat_key == "t_news":
             heading = "رویدادهای داغ بازار کریپتو"
-            body = (
-                f"آخرین تحولات اقتصادی و مارکت: {m.get('news')[:120]}... "
-                f"نوسانات با ثبت بالاترین قیمت ۲۴ساعته در ${m.get('high')} و کف ${m.get('low')} همراه بوده است؛ "
-                f"معامله‌گران باید ریسک فیوچرز را به شدت کنترل کنند."
-            )
+            body = m.get("news") or "• تثبیت قیمت در کانال معاملاتی\n• رصد پوزیشن‌های باز فیوچرز"
             sticker = "بازار پامپ میشه یا دامپ؟"
 
-        elif slug == "trading":
+        elif slug == "dark_psych":
+            char_map = {
+                "d_chal": "شوالیه تاریک و جنگجوی درون در مواجهه با دوراهی‌ها",
+                "d_edu": "روباه مکار و نقاب‌دار و شناخت مکر و فریب در روابط",
+                "d_mar": "گرگ خاکستری و حفظ حریم شخصی و استقلال عاطفی",
+                "d_opt": "بانوی مرموز و جذاب و قوانین کاریزمای کشنده و تسلط حسی",
+                "d_sec": "کنت دراکولا و هیپنوتیزم کلامی و نفوذ با زبان بدن"
+            }
+            subject = char_map.get(cat_key, "روانشناسی تاریک")
             prompt = (
-                f"یک استوری ترید کوتاه و کوبنده فارسی در موضوع {cat['title']} بر اساس بیت‌کوین ${m.get('price')} بنویس.\n"
-                'فقط این ساختار JSON: {"heading": "تیتر جذاب فارسی", "body": "متن تخصصی فارسی", "sticker": "سوال نظرسنجی"}'
+                f"یک استوری جذاب و تأثیرگذار روانشناسی تاریک به زبان فارسی درباره: «{subject}» بنویس.\n"
+                "متن باید کاملاً هماهنگ با این کاراکتر باشد. کلمات کلیدی را بین **کلمه** بگذار.\n"
+                'فقط ساختار JSON: {"heading": "تیتر عمیق و جذاب", "body": "متن اصلی فارسی در ۲ الی ۳ جمله", "sticker": "سوال نظرسنجی"}'
             )
             data = await self.llm.json(prompt, temperature=0.7)
             heading = str(data.get("heading") or cat["tag_fa"])
-            body = str(data.get("body") or f"بیت‌کوین در محدوده ${m.get('price')} در حال تثبیت است؛ حد ضرر فراموش نشود.")
-            sticker = str(data.get("sticker") or "تحلیل تو چیه؟")
+            body = str(data.get("body") or "کسی که در اوج آرامش سکوت می‌کند، کنترل تمام بازی را به دست گرفته است.")
+            sticker = str(data.get("sticker") or "موافقی؟")
+
+        elif slug == "papermache":
+            prompt = (
+                f"یک استوری هنری، گرم و صمیمی فارسی برای پیج مجسمه‌سازی پاپیه‌ماشه در سبک «{cat['title']}» بساز.\n"
+                "کلمات کلیدی را بین **کلمه** بگذار.\n"
+                'فقط JSON: {"heading": "تیتر هنری", "body": "متن دلنشین درباره خمیر، بافت یا مجسمه", "sticker": "سوال تعاملی"}'
+            )
+            data = await self.llm.json(prompt, temperature=0.7)
+            heading = str(data.get("heading") or cat["tag_fa"])
+            body = str(data.get("body") or "هر فرم مجسمه، تبلور دست‌هایی است که به کاغذهای باطله جان دوباره می‌بخشند.")
+            sticker = str(data.get("sticker") or "نظر تو چیه؟")
 
         else:
             prompt = (
-                f"یک استوری جذاب و اختصاصی فارسی برای پیج «{page['title']}» در سبک {cat['title']} بساز.\n"
-                'فقط ساختار JSON: {"heading": "تیتر فارسی", "body": "متن جذاب فارسی", "sticker": "سوال تعاملی"}'
+                f"یک استوری ترید کوتاه فارسی در سبک {cat['title']} بر اساس بیت‌کوین ${m.get('price')} بساز.\n"
+                'فقط JSON: {"heading": "تیتر فارسی", "body": "متن تریدری فارسی", "sticker": "سوال"}'
             )
             data = await self.llm.json(prompt, temperature=0.7)
             heading = str(data.get("heading") or cat["tag_fa"])
-            body = str(data.get("body") or "اصالت و جذابیت در تک تک جزئیات خلق شده است.")
-            sticker = str(data.get("sticker") or "نظر تو چیه؟")
+            body = str(data.get("body") or f"بیت‌کوین در محدوده ${m.get('price')} در حال نوسان است.")
+            sticker = str(data.get("sticker") or "تحلیل تو چیه؟")
 
         out_dir = f"data/outputs/{page['id']}/story_{int(time.time())}"
         os.makedirs(out_dir, exist_ok=True)
