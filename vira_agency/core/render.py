@@ -1,4 +1,4 @@
-```python
+
 """
 موتور رندرینگ گرافیکی حرفه‌ای (مشابه ربات قبلی)
 پشتیبانی از فونت فارسی، ترکیب تصویر هوش مصنوعی با کارت متنی، و تم‌های اختصاصی هر پیج
@@ -224,4 +224,3 @@ def render_reel_frame(brand, text, out_path, index, bgs, logo, art_path=None, sl
         tag=slug,
         art_path=art_path,
     )
-```
