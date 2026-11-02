@@ -1,7 +1,7 @@
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
 توسعه‌دهنده: حسین داودیان
-مجهز به منوی کامل تولید استوری، کاروسل‌های سفارشی و ریلز.
+مجهز به منوی کامل تولید استوری، کاروسل‌های سفارشی، ریلز و تحلیل بازار.
 """
 import logging
 import os
@@ -73,6 +73,7 @@ class ViraTelegramBot:
             [InlineKeyboardButton("🎬 ریلز ۵ سکانسی", callback_data=f"act:{slug}:reel")],
         ]
         if slug == "papermache":
+            kb.append([InlineKeyboardButton("💡 ایده‌پرداز ترند پاپیه‌ماشه", callback_data="dept:papermache:idea_hub")])
             kb.append([InlineKeyboardButton("🛠️ مشاور کارگاه (خمیر، چسب، رنگ)", callback_data="dept:papermache:workshop_q")])
         kb.append([InlineKeyboardButton("🔙 تغییر پیج", callback_data="menu:select_page")])
         return InlineKeyboardMarkup(kb)
@@ -142,7 +143,7 @@ class ViraTelegramBot:
                     await q.edit_message_text(
                         f"📲 **انتخاب سبک استوری برای «{page['title']}»:**",
                         reply_markup=self._story_cats_menu(page),
-                        parse_mode="Markdown",
+                        parse_Mode="Markdown",
                     )
                 else:
                     context.user_data["vira_task"] = {"slug": slug, "kind": kind}
@@ -165,6 +166,30 @@ class ViraTelegramBot:
                 "trading",
             )
             await q.message.reply_text(ans, reply_markup=self._main_menu())
+        elif data == "dept:papermache:idea_hub":
+            kb = [
+                [InlineKeyboardButton("📲 ایده استوری فروش و تعامل", callback_data="art_idea:story")],
+                [InlineKeyboardButton("🖼️ ایده کاروسل دکور و معرفی اثر", callback_data="art_idea:carousel")],
+                [InlineKeyboardButton("🎬 ایده ریلز قبل و بعد ساخت", callback_data="art_idea:reel")],
+                [InlineKeyboardButton("🛠️ مشاوره کارگاه پاپیه‌ماشه", callback_data="dept:papermache:workshop_q")],
+                [InlineKeyboardButton("🔙 بازگشت", callback_data="menu:main")],
+            ]
+            await q.edit_message_text("🎨 **ایده‌پرداز تخصصی پاپیه‌ماشه**", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        elif data.startswith("art_idea:"):
+            kind = data.split(":")[1]
+            await q.edit_message_text("⏳ دستیار ویرا در حال ایده‌پردازی...")
+            ans = await self.llm.generate_text(
+                f"۵ ایده جذاب، جدید و فروش‌محور {kind} برای پیج مجسمه‌های دست‌ساز پاپیه‌ماشه بده.",
+                VIRA_SYSTEM_IDENTITY,
+                "Art",
+            )
+            await q.message.reply_text(
+                ans,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="dept:papermache:idea_hub")]]),
+            )
+        elif data == "dept:papermache:workshop_q":
+            context.user_data["vira_task"] = {"slug": "papermache", "kind": "workshop"}
+            await q.edit_message_text("🛠️ سوالت رو درباره ساخت خمیر، چسب چوب، سمباده یا رنگ‌آمیزی پاپیه‌ماشه بنویس:")
 
     async def on_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
