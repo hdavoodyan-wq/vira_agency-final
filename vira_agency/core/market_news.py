@@ -1,4 +1,4 @@
-```python
+
 """
 واحد زنده دریافت قیمت‌ها، روند تکنیکال و اخبار بازار کریپتو و فارکس
 بدون نیاز به کلید API و با اتصال به اندپوینت‌های آزاد بین‌المللی
@@ -49,4 +49,3 @@ async def get_live_market_summary() -> str:
     except Exception as e:
         log.warning("Could not fetch live crypto prices: %s", e)
         return "بیت‌کوین در ناحیه تراکم و نوسان شدید نقدینگی، نهنگ‌ها در حال شکار استاپ‌لاس‌های سطوح حساس."
-```
