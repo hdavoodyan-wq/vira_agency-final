@@ -1,4 +1,4 @@
-```python
+
 """
 ماژول تنظیمات مرکزی آژانس هوشمند دستیار ویرا
 پشتیبانی همزمان از Gemini, NVIDIA, Cloudflare و HuggingFace از روی متغیرهای Render
