@@ -186,13 +186,38 @@ class LLMRouter:
         for i in issues:
             code = f"HTTP {i['code']}" if i["code"] else "no-response"
             lines.append(f"• {i['model']}: {code} ({KIND_TITLES[i['kind']].split(' ', 1)[1]})")
+            if i.get("detail"):
+                lines.append(f"   ↳ {i['detail'][:110]}")
         if extra:
             lines += ["", extra]
         return "\n".join(lines)
 
+    async def diagnose(self) -> str:
+        """گزارش کامل اتصال به Gemini (برای دستور /diag تو تلگرام)"""
+        api_key = (getattr(self.cfg, "gemini_api_key", "") or "").strip().strip('"').strip("'")
+        if not api_key:
+            return "❌ GEMINI_API_KEY تو تنظیمات رندر خالیه"
+        lines = ["🔍 گزارش تشخیص Gemini", ""]
+        lines.append(f"کلید: {len(api_key)} کاراکتر، شروع با {api_key[:4]}")
+        try:
+            ip = await asyncio.to_thread(
+                lambda: urllib.request.urlopen("https://api.ipify.org", timeout=10).read().decode()
+            )
+            lines.append(f"IP سرور: {ip}")
+        except Exception as e:
+            lines.append(f"❌ اینترنت سرور/IP: {e}")
+        ok, result = await self._list_available_models(api_key)
+        if ok:
+            lines.append("✅ لیست مدل‌ها گرفته شد (کلید و مسیر سالمه)")
+            lines.append("مدل‌های موجود: " + ", ".join(result[:10]))
+        else:
+            lines.append(f"❌ لیست مدل‌ها: {result}")
+        lines.append("مدل‌های تنظیم‌شده: " + ", ".join(self._get_models()))
+        return "\n".join(lines)
+
     # ---------- API اصلی ----------
     async def generate_text(self, prompt: str, system_prompt: str = "", department: str = "CEO", temperature: float = 0.7) -> str:
-        api_key = getattr(self.cfg, "gemini_api_key", "")
+        api_key = (getattr(self.cfg, "gemini_api_key", "") or "").strip().strip('"').strip("'")
         if not api_key:
             return f"{ERROR_PREFIX} خطا: کلید GEMINI_API_KEY در تنظیمات سرور ثبت نشده است."
 
