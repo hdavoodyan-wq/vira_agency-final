@@ -1,12 +1,11 @@
 """
-مسیریاب هوشمند چندموتوره (Multi-Provider LLM Router) با اتصال پایدار به Google Gemini و پشتیبان ابری Cloudflare
+مسیریاب هوشمند LLM با اولویت مطلق روی قدرتمندترین مدل‌های نسل جدید (Gemini 3.8 Flash و Gemini 3.1 Pro)
 """
 import asyncio
 import json
 import logging
-import os
-import urllib.error
 import urllib.request
+import urllib.error
 
 from vira_agency.core.config import AgencyConfig
 from vira_agency.core.database import AgencyDatabase
@@ -21,46 +20,38 @@ class LLMRouter:
 
     async def generate_text(self, prompt: str, system_prompt: str = "", department: str = "CEO", temperature: float = 0.7) -> str:
         full_prompt = f"{system_prompt}\n\n{prompt}".strip() if system_prompt else prompt
-
-        # خواندن مستقیم کلید از کانفیگ یا به صورت مستقیم از متغیرهای محیطی رندر
-        api_key = getattr(self.cfg, "gemini_api_key", "") or os.getenv("GEMINI_API_KEY", "").strip()
+        
+        api_key = getattr(self.cfg, "gemini_api_key", "")
         if not api_key:
-            for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GENAI_API_KEY"):
-                val = os.getenv(k, "").strip()
-                if val.startswith("AIza"):
-                    api_key = val
-                    break
+            return "⚠️ خطا: کلید GEMINI_API_KEY در تنظیمات سرور ثبت نشده است."
 
-        if not api_key:
-            return "⚠️ خطا: کلید GEMINI_API_KEY در پنل رندر تنظیم نشده است."
-
-        # لیست مدل‌های معتبر و پایدار گوگل به ترتیب اولویت
+        # اولویت‌بندی دقیق براساس جدیدترین مدل‌های رسمی API گوگل
         models_to_try = [
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
-            "gemini-pro"
+            "gemini-3.8-flash",
+            "gemini-3.1-pro-preview",
+            "gemini-3.5-flash-lite",
+            "gemini-1.5-pro"
         ]
 
         last_err = ""
         for model_name in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
             payload = {
                 "contents": [{"parts": [{"text": full_prompt}]}],
                 "generationConfig": {"temperature": temperature},
             }
             try:
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                
-                def _send():
+                def _call():
+                    req = urllib.request.Request(
+                        url,
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
                     with urllib.request.urlopen(req, timeout=45) as resp:
                         return json.loads(resp.read().decode("utf-8"))
 
-                data = await asyncio.to_thread(_send)
+                data = await asyncio.to_thread(_call)
                 candidates = data.get("candidates") or []
                 if candidates:
                     parts = candidates[0].get("content", {}).get("parts") or []
@@ -71,20 +62,19 @@ class LLMRouter:
                             return ans
             except urllib.error.HTTPError as he:
                 err_body = he.read().decode("utf-8", errors="ignore")
-                last_err = f"{model_name}:{he.code}"
-                log.warning("Model %s failed with HTTP %d: %s", model_name, he.code, err_body[:100])
+                last_err = f"{model_name} (HTTP {he.code})"
+                log.warning("Model %s failed: %s", model_name, err_body[:150])
                 continue
             except Exception as e:
-                last_err = f"{model_name}:{e}"
-                log.warning("Model %s failed: %s", model_name, e)
+                last_err = f"{model_name} ({str(e)})"
+                log.warning("Model %s error: %s", model_name, e)
                 continue
 
-        return f"⚠️ خطای ارتباط با جمینای (آخرین خطا: {last_err}). لطفاً کلید API را بررسی کنید."
+        return f"⚠️ خطای API جمینای: آخرین خطا: {last_err}"
 
     async def generate_image(self, prompt: str, output_path: str) -> bool:
-        """سیستم دومرحله‌ای تولید تصویر با پشتیبان ابری کلودفلر (Cloudflare Workers AI)"""
-        cf_account = getattr(self.cfg, "cf_account_id", "") or os.getenv("CF_ACCOUNT_ID", "").strip()
-        cf_token = getattr(self.cfg, "cf_api_token", "") or os.getenv("CF_API_TOKEN", "").strip()
+        cf_account = getattr(self.cfg, "cf_account_id", "")
+        cf_token = getattr(self.cfg, "cf_api_token", "")
 
         if cf_account and cf_token:
             try:
@@ -114,10 +104,11 @@ class LLMRouter:
                     except Exception:
                         pass
 
+                    import os
                     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
                     with open(output_path, "wb") as f:
                         f.write(img_bytes)
-                    return os.path.exists(output_path) and os.path.getsize(output_path) > 500
+                    return True
             except Exception as e:
                 log.warning("Cloudflare image generation failed: %s", e)
 
