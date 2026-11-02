@@ -1,11 +1,11 @@
 """
-نقطه شروع ربات تلگرام آژانس هوشمند «دستیار ویرا» (نسخه نهایی با پورت وب Flask برای رندر رایگان)
+نقطه شروع ربات تلگرام آژانس هوشمند «دستیار ویرا» (مجهز به پورت وب داخلی پایتون برای رندر رایگان)
 توسعه‌دهنده: حسین داودیان
 """
 import logging
 import os
 import threading
-from flask import Flask
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 from vira_agency.core.config import AgencyConfig, VIRA_SYSTEM_IDENTITY
@@ -16,16 +16,28 @@ from vira_agency.core.orchestrator import ViraOrchestrator
 logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", level=logging.INFO)
 log = logging.getLogger("vira_agency")
 
-# راه‌اندازی وب‌سرور سبک Flask برای رفع خطای No open ports detected در رندر رایگان
-web_app = Flask("ViraAgencyWeb")
 
-@web_app.route("/")
-def health_check():
-    return "Vira Agency Bot is running live and active! 🚀", 200
+# وب‌سرور فوق‌سبک داخلی پایتون (بدون نیاز به نصب Flask در requirements.txt) برای باز نگه داشتن پورت Render رایگان
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write("Vira Agency Bot is running live and active! 🚀".encode("utf-8"))
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        pass  # جلوگیری از شلوغ شدن لاگ‌های رندر
+
 
 def run_web_server():
     port = int(os.getenv("PORT", "10000"))
-    web_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    log.info("✅ Render Web Server bound and listening on 0.0.0.0:%d", port)
+    server.serve_forever()
 
 
 class ViraTelegramBot:
@@ -147,10 +159,9 @@ class ViraTelegramBot:
         await msg.reply_text(reply, reply_markup=self._main_menu())
 
     def run(self):
-        # روشن کردن سرور وب در یک ترد جداگانه برای پاسخ به پورتهای رندر
+        # روشن کردن وب‌سرور پورت رندر قبل از شروع ربات تلگرام
         t = threading.Thread(target=run_web_server, daemon=True)
         t.start()
-        log.info("Flask web server started on port %s", os.getenv("PORT", "10000"))
 
         app = Application.builder().token(self.cfg.telegram_token).build()
         app.add_handler(CommandHandler("start", self.cmd_start))
