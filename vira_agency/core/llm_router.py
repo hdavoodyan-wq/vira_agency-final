@@ -1,4 +1,4 @@
-```python
+
 """
 مسیریاب هوشمند چندموتوره (Multi-Provider LLM Router)
 ۱. کشف خودکار مدل‌های فعال Gemini از سرور گوگل (بدون خطای 404)
@@ -234,4 +234,3 @@ class LLMRouter:
         with urllib.request.urlopen(req, timeout=35) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         return data["choices"][0]["message"]["content"].strip()
-```
