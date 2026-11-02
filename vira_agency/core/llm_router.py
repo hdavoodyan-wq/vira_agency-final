@@ -1,4 +1,4 @@
-```python
+
 """
 مسیریاب هوشمند LLM با پشتیبانی از تولید JSON استوری/ریلز و ساخت تصویر با کلودفلر (Flux)
 """
@@ -172,4 +172,3 @@ class LLMRouter:
                 log.warning("Cloudflare image generation failed: %s", e)
 
         return False
-```
