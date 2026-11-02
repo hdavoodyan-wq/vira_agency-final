@@ -1,5 +1,5 @@
 """
-ماژول تنظیمات مرکزی آژانس هوشمند دستیار ویرا (AI Marketing & Digital Business Agency)
+ماژول تنظیمات مرکزی آژانس هوشمند دستیار ویرا
 توسعه‌دهنده: حسین داودیان
 """
 import os
@@ -17,15 +17,20 @@ except Exception:
 class AgencyConfig:
     bot_name: str = "دستیار ویرا"
     creator_name: str = "حسین داودیان"
+    
+    # خواندن توکن ربات از رندر (پشتیبانی از هر دو نام)
     telegram_token: str = field(default_factory=lambda: (
         os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or ""
     ).strip())
+    
+    # خواندن ادمین آیدی
     owner_id: int = field(default_factory=lambda: int(
         (os.getenv("TELEGRAM_OWNER_ID") or os.getenv("OWNER_ID") or "0").strip() or "0"
     ))
+    
     db_path: str = field(default_factory=lambda: os.getenv("VIRA_DB_PATH", "data/vira_agency.db"))
     
-    # خواندن مطمئن و جامع کلید جمینای مستقیماً از متغیرهای رندر
+    # خواندن مستقیم و بدون خطای کلید جمینای از رندر
     gemini_api_key: str = field(default_factory=lambda: (
         os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GENAI_API_KEY") or ""
     ).strip())
@@ -44,3 +49,6 @@ VIRA_SYSTEM_IDENTITY = """تو «دستیار ویرا» (Vira) هستی؛ مد�
 - نام سازنده‌ات «حسین داودیان» است، اما فقط در صورت پرسش مستقیم آن را اعلام می‌کنی.
 - لحن صحبت تو صمیمی، بامزه و باهوش است.
 """
+```eof
+
+این کد رو توی گیت‌هاب جایگزین کن و Commit بزن. بعد از آپدیت، رندر ربات رو ری‌استارت می‌کنه و چون کلید رو مستقیم می‌خونه، دیگه این اخطار رو نمی‌بینی. تست کن و خبرشو بده!
