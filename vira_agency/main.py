@@ -1,7 +1,7 @@
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
 توسعه‌دهنده: حسین داودیان
-مجهز به وب‌سرور پورت‌یاب رندر و ضدقطعی
+مجهز به وب‌سرور پورت‌یاب رندر و سیستم ضدتداخل (Conflict Fix)
 """
 import logging
 import os
@@ -84,7 +84,7 @@ class ViraTelegramBot:
             cats = [
                 ("📈 تحلیل بازار و وضعیت بیت‌کوین", "t_market"),
                 ("📰 اخبار زنده فارکس و کریپتو", "t_news"),
-                ("⚡ کوییز تریدری (اینجا وارد شویم؟)", "t_quiz"),
+                ("⚡ کوییز تریدری", "t_quiz"),
                 ("🧠 روانشناسی ترید و کنترل طمع", "t_psyc"),
                 ("🎯 هشدار تله نقدینگی و استاپ‌هانت", "t_hunt"),
                 ("🐂 نبرد حماسی گاو و خرس", "t_bull"),
@@ -112,7 +112,7 @@ class ViraTelegramBot:
         context.user_data.clear()
         await update.effective_message.reply_text(
             "سلام! من **«دستیار ویرا»** هستم ✨🤖\n"
-            "آماده‌ام تا هر ۳ پیج تو را با تم‌های اختصاصی (بنفش سلطنتی ترید و گوتیک تاریک) مدیریت کنم!",
+            "آماده‌ام تا هر ۳ پیج تو را با تم‌های اختصاصی مدیریت کنم!",
             reply_markup=self._main_menu(),
             parse_mode="Markdown",
         )
@@ -153,23 +153,24 @@ class ViraTelegramBot:
             page = self.db.get_page_by_slug(slug)
             if page:
                 await q.edit_message_text(f"⏳ دستیار ویرا در حال تولید استوری گرافیکی برای پیج «{page['title']}»...")
-                prompt = f"یک استوری در سبک {cat_key} برای پیج {page['title']} بساز."
-                ans = await self.llm.generate_text(prompt, VIRA_SYSTEM_IDENTITY, slug, temperature=0.8)
+                prompt = f"یک استوری کوتاه و جذاب در سبک {cat_key} برای پیج {page['title']} بساز."
+                ans = await self.llm.generate_text(prompt, VIRA_SYSTEM_IDENTITY, slug, temperature=0.7)
                 
                 out_dir = f"data/outputs/{page['id']}/story_{int(time.time())}"
                 os.makedirs(out_dir, exist_ok=True)
                 out_path = os.path.join(out_dir, "story.jpg")
                 
-                story_obj = {"heading": "موضوع استوری", "body": ans[:200]}
+                story_obj = {"heading": "استوری تخصصی ویرا", "body": ans[:180] if ans else "محتوای استوری"}
                 render_story(None, story_obj, out_path, 0, [], None, cat_key)
                 
                 self.db.save_content(page["id"], "story", f"{cat_key}: {ans[:40]}", {"text": ans})
                 
+                clean_caption = f"✅ **استوری تخصصی گرافیکی آماده شد!**\n\n{ans[:180]}...".replace("*", "").replace("_", "")
+                
                 with open(out_path, "rb") as photo_file:
                     await q.message.reply_photo(
                         photo=photo_file,
-                        caption=f"✅ **استوری تخصصی گرافیکی آماده شد!**\n\n{ans[:200]}...",
-                        parse_mode="Markdown",
+                        caption=clean_caption,
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data=f"page_hub:{slug}")]])
                     )
 
@@ -234,7 +235,6 @@ class ViraTelegramBot:
         await msg.reply_text(reply, reply_markup=self._main_menu())
 
     def run(self):
-        # راه‌اندازی وب‌سرور پورت‌یاب رندر پیش از استارت ربات تلگرام
         t_web = threading.Thread(target=run_web_server, daemon=True)
         t_web.start()
 
