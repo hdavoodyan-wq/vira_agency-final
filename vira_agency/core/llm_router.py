@@ -1,5 +1,5 @@
 """
-لایه آداپتور هوش مصنوعی (LLM Router) با قدرتمندترین و پیشرفته‌ترین مدل‌های گوگل جمینای
+لایه آداپتور هوش مصنوعی (LLM Router) با سیستم Fallback هوشمند برای گوگل جمینای
 """
 import asyncio
 import json
@@ -18,13 +18,6 @@ class LLMRouter:
     def __init__(self, cfg: AgencyConfig, db: AgencyDatabase):
         self.cfg = cfg
         self.db = db
-        # استفاده از پیشرفته‌ترین مدل‌های هوش مصنوعی جمینای برای حداکثر هوش و کیفیت
-        self.candidate_models = [
-            "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "gemini-1.5-pro",
-            "gemini-1.5-flash"
-        ]
 
     async def generate_text(self, prompt: str, system_prompt: str = "", department: str = "CEO", temperature: float = 0.7) -> str:
         full_prompt = f"{system_prompt}\n\n{prompt}".strip() if system_prompt else prompt
@@ -41,20 +34,27 @@ class LLMRouter:
         if not api_key:
             return "⚠️ خطا: کلید GEMINI_API_KEY در پنل رندر تنظیم نشده است."
 
-        for model_name in self.candidate_models:
+        # لیست مدل‌های معتبر به ترتیب اولویت برای جلوگیری از خطای ۴۰۴ یا دسترسی
+        models = [
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+            "gemini-pro"
+        ]
+
+        for model_name in models:
             try:
                 res = await asyncio.to_thread(self._call_gemini, full_prompt, temperature, model_name, api_key)
                 if res:
                     self.db.log_ai_usage(department, "gemini", model_name, len(full_prompt) // 4)
                     return res
             except Exception as e:
-                log.warning("Model %s failed (%s), trying next...", model_name, e)
+                log.warning("Model %s failed: %s", model_name, e)
                 continue
 
         return "⚠️ خطا در ارتباط با هوش مصنوعی. لطفاً کلید API را بررسی کنید."
 
     def _call_gemini(self, text: str, temperature: float, model_name: str, api_key: str) -> str:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key}"
         payload = {
             "contents": [{"parts": [{"text": text}]}],
             "generationConfig": {"temperature": temperature},
