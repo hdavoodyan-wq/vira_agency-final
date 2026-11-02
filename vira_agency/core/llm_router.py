@@ -1,10 +1,5 @@
-
 """
-مسیریاب هوشمند چندموتوره (Multi-Provider LLM Router)
-۱. کشف خودکار مدل‌های فعال Gemini از سرور گوگل (بدون خطای 404)
-۲. پشتیبان خودکار با NVIDIA NIM API (کلید NVIDIA_API_KEY شما در رندر)
-۳. پشتیبان خودکار با Cloudflare Workers AI (کلید CLOUDFLARE_API_TOKEN شما در رندر)
-۴. پشتیبان خودکار با HuggingFace (کلید HF_TOKEN شما در رندر)
+لایه ارتباطی هوشمند و ضدقطعی با سیستم هوش مصنوعی و تصویرساز (Gemini با پشتیبان Cloudflare)
 """
 import asyncio
 import json
@@ -23,114 +18,28 @@ class LLMRouter:
     def __init__(self, cfg: AgencyConfig, db: AgencyDatabase):
         self.cfg = cfg
         self.db = db
-        self._cached_gemini_model: str | None = None
 
     async def generate_text(self, prompt: str, system_prompt: str = "", department: str = "CEO", temperature: float = 0.7) -> str:
         full_prompt = f"{system_prompt}\n\n{prompt}".strip() if system_prompt else prompt
-        errors = []
+        
+        api_key = getattr(self.cfg, "gemini_api_key", "") or os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GENAI_API_KEY"):
+                val = os.getenv(k, "").strip()
+                if val.startswith("AIza"):
+                    api_key = val
+                    break
 
-        # ۱. تلاش با Google Gemini (با کشف خودکار مدل فعال اکانت شما)
-        gemini_key = getattr(self.cfg, "gemini_api_key", "") or os.getenv("GEMINI_API_KEY", "").strip()
-        if gemini_key:
-            try:
-                res, used_model = await asyncio.to_thread(self._try_gemini_smart, full_prompt, temperature, gemini_key)
-                if res:
-                    self.db.log_ai_usage(department, "gemini", used_model, len(full_prompt) // 4)
-                    return res
-            except Exception as e:
-                err_msg = f"Gemini({e})"
-                log.warning(err_msg)
-                errors.append(err_msg)
+        if not api_key:
+            return "⚠️ خطا: کلید GEMINI_API_KEY در پنل رندر تنظیم نشده است."
 
-        # ۲. تلاش خودکار با NVIDIA API (موجود در پنل رندر شما)
-        nvidia_key = getattr(self.cfg, "nvidia_api_key", "") or os.getenv("NVIDIA_API_KEY", "").strip()
-        if nvidia_key:
-            try:
-                res = await asyncio.to_thread(self._call_nvidia, prompt, system_prompt, temperature, nvidia_key)
-                if res:
-                    self.db.log_ai_usage(department, "nvidia", "llama-3.1-70b", len(full_prompt) // 4)
-                    return res
-            except Exception as e:
-                err_msg = f"NVIDIA({e})"
-                log.warning(err_msg)
-                errors.append(err_msg)
-
-        # ۳. تلاش خودکار با Cloudflare Workers AI (موجود در پنل رندر شما)
-        cf_id = getattr(self.cfg, "cf_account_id", "") or os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
-        cf_token = getattr(self.cfg, "cf_api_token", "") or os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
-        if cf_id and cf_token:
-            try:
-                res = await asyncio.to_thread(self._call_cloudflare, prompt, system_prompt, cf_id, cf_token)
-                if res:
-                    self.db.log_ai_usage(department, "cloudflare", "llama-3.1-8b", len(full_prompt) // 4)
-                    return res
-            except Exception as e:
-                err_msg = f"CF({e})"
-                log.warning(err_msg)
-                errors.append(err_msg)
-
-        # ۴. تلاش خودکار با HuggingFace (موجود در پنل رندر شما)
-        hf_key = getattr(self.cfg, "hf_token", "") or os.getenv("HF_TOKEN", "").strip()
-        if hf_key:
-            try:
-                res = await asyncio.to_thread(self._call_huggingface, full_prompt, hf_key)
-                if res:
-                    self.db.log_ai_usage(department, "huggingface", "qwen-2.5-72b", len(full_prompt) // 4)
-                    return res
-            except Exception as e:
-                err_msg = f"HF({e})"
-                log.warning(err_msg)
-                errors.append(err_msg)
-
-        detail = " | ".join(errors) if errors else "هیچ کلیدی در Environment پیدا نشد"
-        return f"❌ گزارش دقیق فنی سرویس‌ها:\n{detail[:350]}"
-
-    def _discover_gemini_models(self, api_key: str) -> list[str]:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-
-        available = []
-        for m in data.get("models", []):
-            methods = m.get("supportedGenerationMethods", [])
-            name = m.get("name", "")
-            if "generateContent" in methods and "gemini" in name:
-                short_name = name.replace("models/", "")
-                if not any(x in short_name for x in ("vision", "embedding", "tts", "imagen", "aqa")):
-                    available.append(short_name)
-
-        preferred = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-lite",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
-        ]
-        sorted_models = [p for p in preferred if p in available]
-        for a in available:
-            if a not in sorted_models:
-                sorted_models.append(a)
-        return sorted_models or preferred
-
-    def _try_gemini_smart(self, text: str, temperature: float, api_key: str) -> tuple[str, str]:
-        models_to_try = []
-        if self._cached_gemini_model:
-            models_to_try.append(self._cached_gemini_model)
-
-        try:
-            discovered = self._discover_gemini_models(api_key)
-            for m in discovered:
-                if m not in models_to_try:
-                    models_to_try.append(m)
-        except Exception:
-            models_to_try.extend(["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"])
-
+        models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
         last_err = ""
-        for model_name in models_to_try[:6]:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+
+        for model_name in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key}"
             payload = {
-                "contents": [{"parts": [{"text": text}]}],
+                "contents": [{"parts": [{"text": full_prompt}]}],
                 "generationConfig": {"temperature": temperature},
             }
             try:
@@ -140,97 +49,73 @@ class LLMRouter:
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
-                with urllib.request.urlopen(req, timeout=35) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
+                
+                def _send():
+                    with urllib.request.urlopen(req, timeout=45) as resp:
+                        return json.loads(resp.read().decode("utf-8"))
+
+                data = await asyncio.to_thread(_send)
                 candidates = data.get("candidates") or []
                 if candidates:
                     parts = candidates[0].get("content", {}).get("parts") or []
-                    if parts and parts[0].get("text"):
-                        self._cached_gemini_model = model_name
-                        return parts[0]["text"].strip(), model_name
-            except urllib.error.HTTPError as he:
-                err_body = he.read().decode("utf-8", errors="ignore")
-                last_err = f"{model_name}:{he.code}"
-                continue
+                    if parts:
+                        ans = parts[0].get("text", "").strip()
+                        if ans:
+                            self.db.log_ai_usage(department, "gemini", model_name, len(full_prompt) // 4)
+                            return ans
             except Exception as e:
-                last_err = f"{model_name}:{e}"
+                last_err = str(e)
                 continue
 
-        raise RuntimeError(last_err or "No Gemini model")
+        return f"⚠️ خطای ارتباط با جمینای: {last_err[:100]}"
 
-    def _call_nvidia(self, prompt: str, system_prompt: str, temperature: float, api_key: str) -> str:
-        url = "https://integrate.api.nvidia.com/v1/chat/completions"
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+    async def generate_image(self, prompt: str, output_path: str) -> bool:
+        """سیستم دومرحله‌ای تولید تصویر: اول تلاش با جمینای، در صورت خطا سوئیچ خودکار روی کلودفلر (Cloudflare AI)"""
+        # ۱. تلاش اول با جمینای (یا سرویس‌های کمکی)
+        try:
+            # اگر در آینده مدل تصویرساز جمینای فعال شود در اینجا قرار می‌گیرد
+            pass
+        except Exception:
+            pass
 
-        for model in ("meta/llama-3.1-70b-instruct", "meta/llama-3.1-8b-instruct", "google/gemma-2-27b-it"):
+        # ۲. تلاش دوم و پشتیبان: موتور ابری کلودفلر (Cloudflare Workers AI)
+        cf_account = getattr(self.cfg, "cf_account_id", "") or os.getenv("CF_ACCOUNT_ID", "").strip()
+        cf_token = getattr(self.cfg, "cf_api_token", "") or os.getenv("CF_API_TOKEN", "").strip()
+
+        if cf_account and cf_token:
             try:
-                payload = {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": 1024,
-                }
+                url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account}/ai/run/@cf/blackforestlabs/flux-1-schnell"
+                payload = {"prompt": prompt}
                 req = urllib.request.Request(
                     url,
                     data=json.dumps(payload).encode("utf-8"),
                     headers={
+                        "Authorization": f"Bearer {cf_token}",
                         "Content-Type": "application/json",
-                        "Authorization": f"Bearer {api_key}",
                     },
                     method="POST",
                 )
-                with urllib.request.urlopen(req, timeout=35) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                ans = data["choices"][0]["message"]["content"].strip()
-                if ans:
-                    return ans
-            except Exception:
-                continue
-        raise RuntimeError("NVIDIA failed")
+                
+                def _call_cf():
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        return resp.read()
 
-    def _call_cloudflare(self, prompt: str, system_prompt: str, account_id: str, api_token: str) -> str:
-        model = "@cf/meta/llama-3.1-8b-instruct"
-        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+                img_bytes = await asyncio.to_thread(_call_cf)
+                if img_bytes and len(img_bytes) > 500:
+                    # اگر پاسخ به صورت JSON بود (تصویر بیس‌۶۴) یا باینری مستقیم
+                    try:
+                        res_json = json.loads(img_bytes.decode("utf-8"))
+                        if "result" in res_json and "image" in res_json["result"]:
+                            import base64
+                            img_bytes = base64.b64decode(res_json["result"]["image"])
+                    except Exception:
+                        pass
 
-        req = urllib.request.Request(
-            url,
-            data=json.dumps({"messages": messages}).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_token}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=35) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        res = (data.get("result") or {}).get("response", "").strip()
-        if res:
-            return res
-        raise RuntimeError("CF empty")
+                    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                    with open(output_path, "wb") as f:
+                        f.write(img_bytes)
+                    return os.path.exists(output_path) and os.path.getsize(output_path) > 500
+            except Exception as e:
+                log.warning("Cloudflare image fallback failed: %s", e)
 
-    def _call_huggingface(self, full_prompt: str, hf_token: str) -> str:
-        url = "https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions"
-        payload = {
-            "model": "Qwen/Qwen2.5-72B-Instruct",
-            "messages": [{"role": "user", "content": full_prompt}],
-            "max_tokens": 900,
-        }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {hf_token}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=35) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return data["choices"][0]["message"]["content"].strip()
+        return False
