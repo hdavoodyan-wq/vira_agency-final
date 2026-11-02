@@ -88,9 +88,78 @@ def _get_theme(tag_or_slug: str):
         return {
             "border": (217, 119, 6, 220),          # کهربایی گرم
             "glass_tint": (32, 24, 18, 220),        # شیشه‌ای گرم کارگاهی
+            "accent": (249, 115, 22),               # نارنجی سفالی برای نکات مهم
+            "text": (254, 243, 199),               # کرم روشن
+            "sub": (253, 230, 138),                # کرم طلایی
+            "watermark": "@papermache_art | هنر دست‌ساز"
+        }
+
+
+def _tokenize_text(text: str) -> list[tuple[str, bool]]:
+    """تجزیه متن به کلمات معمولی و کلمات هایلایت شده با **کلمه**"""
+    tokens = []
+    parts = re.split(r"(\*\*.*?\*\*)", text)
+    for p in parts:
+        if not p:
+            continue
+        if p.startswith("**") and p.endswith("**") and len(p) > 4:
+            clean = p[2:-2].strip()
+            for w in clean.split():
+                if w:
+                    tokens.append((w, True))
+        else:
+            for w in p.split():
+                if w:
+                    tokens.append((w, False))
+    return tokens
+
+
+def _wrap_tokens(tokens: list[tuple[str, bool]], font: ImageFont.ImageFont, max_width_px: int) -> list[list[tuple[str, bool]]]:
+    """شکستن خطوط فارسی بر اساس عرض واقعی پیکسل‌ها"""
+    lines = []
+    current_line = []
+    current_w = 0
+
+    space_w = font.getbbox(" ")[2] - font.getbbox(" ")[0] if font else 10
+
+    for word, is_hl in tokens:
+        shaped = _shape_persian(word)
+        bbox = font.getbbox(shaped) if font else (0, 0, len(word) * 12, 20)
+        word_w = bbox[2] - bbox[0]
+
+        add_w = word_w if not current_line else word_w + space_w
+
+        if current_w + add_w <= max_width_px:
+            current_line.append((word, is_hl))
+            current_w += add_w
+        else:
+            if current_line:
+                lines.append(current_line)
+            current_line = [(word, is_hl)]
+            current_w = word_w
+
+    if current_line:
+        lines.append(current_line)
+    return lines
+
+
+def _draw_rich_persian_line(draw: ImageDraw.ImageDraw, line_tokens: list[tuple[str, bool]], start_x: int, y: int, font: ImageFont.ImageFont, default_color: tuple, accent_color: tuple):
+    """رسم کلمات خط فارسی از راست به چپ با رنگ متمایز برای کلمات هایلایت شده"""
+    cur_x = start_x
+    space_w = font.getbbox(" ")[2] - font.getbbox(" ")[0] if font else 10
+
+    for word, is_hl in line_tokens:
+        shaped = _shape_persian(word)
+        bbox = font.getbbox(shaped) if font else (0, 0, len(word) * 12, 20)
+        word_w = bbox[2] - bbox[0]
+
+        color = accent_color if is_hl else default_color
+        draw.text((cur_x - word_w, y), shaped, fill=color, font=font)
+        cur_x -= (word_w + space_w)
+
+
 def _draw_brush_background(draw: ImageDraw.ImageDraw, x1: int, y1: int, x2: int, y2: int, fill_color, stroke_color):
     """ایجاد فرم آزاد ارگانیک شبیه پالت رنگ یا رد قلم‌مو برای پیج هنر"""
-    # لایه کادر کرم و ارگانیک
     points = [
         (x1 + 30, y1), (x2 - 40, y1 + 10),
         (x2, y1 + 60), (x2 - 15, y2 - 40),
@@ -134,7 +203,7 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
 
     # ------------------ استایل ۱: روانشناسی تاریک (بدون کادر، متن مستقیم، خط سرخ) ------------------
     if is_dark:
-        # اعمال گرادیان ملایم تیره در پایین تصویر بدون تاریکی شدید سوژه
+        # گرادیان ملایم تیره در پایین تصویر بدون تاریکی شدید سوژه
         gradient = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
         d_grad = ImageDraw.Draw(gradient)
         for y in range(850, 1920):
@@ -149,7 +218,6 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
         head_lines = _wrap_tokens(head_tokens, font_head, max_width_px=920)
         y_cursor = 1050
         for hline in head_lines[:2]:
-            # برای وسط‌چین کردن تیتر
             total_w = sum(font_head.getbbox(_shape_persian(w))[2] - font_head.getbbox(_shape_persian(w))[0] + 8 for w, _ in hline)
             start_x = 540 + (total_w // 2)
             _draw_rich_persian_line(draw, hline, start_x, y_cursor, font_head, (255, 255, 255), (239, 68, 68))
@@ -260,20 +328,18 @@ def render_carousel(brand, slides, out_dir, bgs, logo, arts=None, slug="trading"
     paths = []
     for i, s in enumerate(slides):
         p = os.path.join(out_dir, f"slide_{i+1:02d}.jpg")
-        
+
         art_path = arts[i] if (arts and i < len(arts)) else None
         if art_path and os.path.exists(art_path) and os.path.getsize(art_path) > 500:
             base_img = Image.open(art_path).convert("RGBA").resize((1080, 1350), Image.Resampling.LANCZOS)
         else:
             base_img = Image.new("RGBA", (1080, 1350), color=theme["glass_tint"][:3] + (255,))
 
-        # اعمال بلور ملایم در محل متن کاروسل
         crop_box = (40, 720, 1040, 1300)
         lower_crop = base_img.crop(crop_box)
         blurred_lower = lower_crop.filter(ImageFilter.GaussianBlur(radius=20))
         base_img.paste(blurred_lower, crop_box)
 
-        # کارت شیشه‌ای نیمه‌شفاف
         overlay = Image.new("RGBA", (1080, 1350), (0, 0, 0, 0))
         d_overlay = ImageDraw.Draw(overlay)
         d_overlay.rounded_rectangle([45, 730, 1035, 1280], radius=38, fill=theme["glass_tint"], outline=theme["border"], width=3)
@@ -284,7 +350,6 @@ def render_carousel(brand, slides, out_dir, bgs, logo, arts=None, slug="trading"
         heading = str(s.get("heading") or f"اسلاید {i+1}")
         body = str(s.get("body") or "")
 
-        # تیتر اسلاید با کلمات مهم
         head_tokens = _tokenize_text(heading)
         head_lines = _wrap_tokens(head_tokens, font_head, max_width_px=890)
         y_c = 770
@@ -296,7 +361,6 @@ def render_carousel(brand, slides, out_dir, bgs, logo, arts=None, slug="trading"
         draw.line([(95, y_c), (975, y_c)], fill=theme["border"][:3], width=2)
         y_c += 25
 
-        # هایلایت خودکار کلمات مهم در بدنه اسلاید کاروسل
         if "**" not in body:
             words = body.split()
             if len(words) >= 5:
@@ -311,7 +375,6 @@ def render_carousel(brand, slides, out_dir, bgs, logo, arts=None, slug="trading"
             _draw_rich_persian_line(draw, bl, 975, y_c, font_body, theme["sub"], theme["accent"])
             y_c += 58
 
-        # شماره صفحه و پیج در پایین اسلاید
         draw.text((540, 1315), _shape_persian(f"{theme['watermark']}  •  {i+1}/{len(slides)}"), fill=theme["accent"], font=font_wm, anchor="ma")
 
         final_canvas.save(p, quality=94)
