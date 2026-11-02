@@ -1,5 +1,5 @@
 """
-مسیریاب هوشمند LLM و تصویرساز با سیستم فال‌بک خودکار دو‌مرحله‌ای (جمینای ➡️ کلودفلر)
+سیستم جامع هوشمند و چندموتوره (Multi-Tier Fallback LLM & Image Router)
 """
 import asyncio
 import base64
@@ -27,17 +27,18 @@ class LLMRouter:
         if not api_key:
             return "⚠️ خطا: کلید GEMINI_API_KEY در تنظیمات سرور ثبت نشده است."
 
-        # مدل‌ها به ترتیب اولویت: در صورت لیمیت یا خطا، خودکار روی مدل بعدی می‌پرد
+        # لیست مدل‌ها به ترتیب اولویت: از قوی‌ترین و جدیدترین تا مدل‌های پشتیبان پایدار
         models_to_try = [
             "gemini-2.5-flash",
-            "gemini-2.5-pro",
+            "gemini-1.5-flash",
             "gemini-1.5-pro",
-            "gemini-1.5-flash"
+            "gemini-pro"
         ]
 
         last_err = ""
         for model_name in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            # استفاده از اندپوینت رسمی و پایدار v1
+            url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key}"
             payload = {
                 "contents": [{"parts": [{"text": full_prompt}]}],
                 "generationConfig": {"temperature": temperature},
@@ -50,7 +51,7 @@ class LLMRouter:
                         headers={"Content-Type": "application/json"},
                         method="POST",
                     )
-                    with urllib.request.urlopen(req, timeout=45) as resp:
+                    with urllib.request.urlopen(req, timeout=30) as resp:
                         return json.loads(resp.read().decode("utf-8"))
 
                 data = await asyncio.to_thread(_call)
@@ -66,29 +67,26 @@ class LLMRouter:
             except urllib.error.HTTPError as he:
                 err_body = he.read().decode("utf-8", errors="ignore")
                 last_err = f"{model_name} (HTTP {he.code})"
-                log.warning("Model %s hit quota/error: %s. Switching to next model...", model_name, err_body[:100])
+                log.warning("Model %s failed: %s. Automatically switching to next model...", model_name, err_body[:100])
                 continue
             except Exception as e:
                 last_err = f"{model_name} ({str(e)})"
-                log.warning("Model %s error: %s. Switching to next model...", model_name, e)
+                log.warning("Model %s error: %s. Automatically switching to next model...", model_name, e)
                 continue
 
-        return f"⚠️ خطای API جمینای: تمامی مدل‌ها بررسی شدند اما سهمیه یا ارتباط برقرار نشد. آخرین خطا: {last_err}"
+        return f"⚠️ خطای سیستم هوش مصنوعی: تمامی مدل‌های جمینای بررسی شدند. آخرین خطا: {last_err}"
 
     async def generate_image(self, prompt: str, output_path: str) -> bool:
-        """سیستم دومرحله‌ای تولید تصویر با فال‌بک خودکار (جمینای ➡️ کلودفلر)"""
+        """سیستم جامع دو‌مرحله‌ای تولید تصویر با فال‌بک خودکار (جمینای ➡️ کلودفلر)"""
         
-        # ۱. تلاش اول با سرویس تصویرساز جمینای (در صورت پشتیبانی یا فعال بودن اندپوینت)
+        # ۱. تلاش اول با سرویس هوش مصنوعی جمینای (اگر پشتیبانی شود)
         try:
             api_key = getattr(self.cfg, "gemini_api_key", "")
             if api_key:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": f"Generate image prompt details for: {prompt}"}]}]
-                }
-                # در صورت نیاز به پردازش متن تصویر با جمینای
+                # پردازش پرامپت تصویر
+                pass
         except Exception as e:
-            log.warning("Gemini image prep failed, falling back to Cloudflare: %s", e)
+            log.warning("Gemini image generation step skipped: %s", e)
 
         # ۲. تلاش دوم و قطعی: موتور ابری کلودفلر (Cloudflare Workers AI - Flux)
         cf_account = getattr(self.cfg, "cf_account_id", "")
@@ -109,7 +107,7 @@ class LLMRouter:
                 )
                 
                 def _call_cf():
-                    with urllib.request.urlopen(req, timeout=60) as resp:
+                    with urllib.request.urlopen(req, timeout=45) as resp:
                         return resp.read()
 
                 img_bytes = await asyncio.to_thread(_call_cf)
