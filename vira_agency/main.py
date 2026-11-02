@@ -34,9 +34,10 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 
 def run_web_server():
+    # خواندن دقیق پورت اجباری رندر یا پیش‌فرض 10000
     port = int(os.getenv("PORT", "10000"))
     server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    log.info("✅ Render Web Server bound and listening on 0.0.0.0:%d", port)
+    log.info("🚀 Render Web Server forcefully bound and listening on 0.0.0.0:%d", port)
     server.serve_forever()
 
 
