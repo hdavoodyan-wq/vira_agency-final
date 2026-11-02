@@ -1,4 +1,11 @@
+"""
+نقطه شروع ربات تلگرام آژانس هوشمند «دستیار ویرا» (نسخه نهایی با پورت وب Flask برای رندر رایگان)
+توسعه‌دهنده: حسین داودیان
+"""
 import logging
+import os
+import threading
+from flask import Flask
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 from vira_agency.core.config import AgencyConfig, VIRA_SYSTEM_IDENTITY
@@ -7,6 +14,18 @@ from vira_agency.core.llm_router import LLMRouter
 from vira_agency.core.orchestrator import ViraOrchestrator
 
 logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", level=logging.INFO)
+log = logging.getLogger("vira_agency")
+
+# راه‌اندازی وب‌سرور سبک Flask برای رفع خطای No open ports detected در رندر رایگان
+web_app = Flask("ViraAgencyWeb")
+
+@web_app.route("/")
+def health_check():
+    return "Vira Agency Bot is running live and active! 🚀", 200
+
+def run_web_server():
+    port = int(os.getenv("PORT", "10000"))
+    web_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 
 class ViraTelegramBot:
@@ -128,10 +147,16 @@ class ViraTelegramBot:
         await msg.reply_text(reply, reply_markup=self._main_menu())
 
     def run(self):
+        # روشن کردن سرور وب در یک ترد جداگانه برای پاسخ به پورتهای رندر
+        t = threading.Thread(target=run_web_server, daemon=True)
+        t.start()
+        log.info("Flask web server started on port %s", os.getenv("PORT", "10000"))
+
         app = Application.builder().token(self.cfg.telegram_token).build()
         app.add_handler(CommandHandler("start", self.cmd_start))
         app.add_handler(CallbackQueryHandler(self.on_callback))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text_message))
+        log.info("Vira AI Agency Bot started successfully!")
         app.run_polling(drop_pending_updates=True)
 
 
