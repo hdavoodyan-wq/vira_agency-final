@@ -30,7 +30,7 @@ class LLMRouter:
         errors = []
 
         # ۱. تلاش با Google Gemini (با کشف خودکار مدل فعال اکانت شما)
-        gemini_key = self.cfg.gemini_api_key or os.getenv("GEMINI_API_KEY", "").strip()
+        gemini_key = getattr(self.cfg, "gemini_api_key", "") or os.getenv("GEMINI_API_KEY", "").strip()
         if gemini_key:
             try:
                 res, used_model = await asyncio.to_thread(self._try_gemini_smart, full_prompt, temperature, gemini_key)
@@ -38,12 +38,12 @@ class LLMRouter:
                     self.db.log_ai_usage(department, "gemini", used_model, len(full_prompt) // 4)
                     return res
             except Exception as e:
-                err_msg = f"Gemini: {e}"
+                err_msg = f"Gemini({e})"
                 log.warning(err_msg)
                 errors.append(err_msg)
 
         # ۲. تلاش خودکار با NVIDIA API (موجود در پنل رندر شما)
-        nvidia_key = self.cfg.nvidia_api_key or os.getenv("NVIDIA_API_KEY", "").strip()
+        nvidia_key = getattr(self.cfg, "nvidia_api_key", "") or os.getenv("NVIDIA_API_KEY", "").strip()
         if nvidia_key:
             try:
                 res = await asyncio.to_thread(self._call_nvidia, prompt, system_prompt, temperature, nvidia_key)
@@ -51,13 +51,13 @@ class LLMRouter:
                     self.db.log_ai_usage(department, "nvidia", "llama-3.1-70b", len(full_prompt) // 4)
                     return res
             except Exception as e:
-                err_msg = f"NVIDIA: {e}"
+                err_msg = f"NVIDIA({e})"
                 log.warning(err_msg)
                 errors.append(err_msg)
 
         # ۳. تلاش خودکار با Cloudflare Workers AI (موجود در پنل رندر شما)
-        cf_id = self.cfg.cf_account_id or os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
-        cf_token = self.cfg.cf_api_token or os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+        cf_id = getattr(self.cfg, "cf_account_id", "") or os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+        cf_token = getattr(self.cfg, "cf_api_token", "") or os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
         if cf_id and cf_token:
             try:
                 res = await asyncio.to_thread(self._call_cloudflare, prompt, system_prompt, cf_id, cf_token)
@@ -65,12 +65,12 @@ class LLMRouter:
                     self.db.log_ai_usage(department, "cloudflare", "llama-3.1-8b", len(full_prompt) // 4)
                     return res
             except Exception as e:
-                err_msg = f"Cloudflare: {e}"
+                err_msg = f"CF({e})"
                 log.warning(err_msg)
                 errors.append(err_msg)
 
         # ۴. تلاش خودکار با HuggingFace (موجود در پنل رندر شما)
-        hf_key = self.cfg.hf_token or os.getenv("HF_TOKEN", "").strip()
+        hf_key = getattr(self.cfg, "hf_token", "") or os.getenv("HF_TOKEN", "").strip()
         if hf_key:
             try:
                 res = await asyncio.to_thread(self._call_huggingface, full_prompt, hf_key)
@@ -78,15 +78,14 @@ class LLMRouter:
                     self.db.log_ai_usage(department, "huggingface", "qwen-2.5-72b", len(full_prompt) // 4)
                     return res
             except Exception as e:
-                err_msg = f"HF: {e}"
+                err_msg = f"HF({e})"
                 log.warning(err_msg)
                 errors.append(err_msg)
 
         detail = " | ".join(errors) if errors else "هیچ کلیدی در Environment پیدا نشد"
-        return f"⚠️ خطای دقیق سرویس‌ها:\n{detail[:350]}"
+        return f"❌ گزارش دقیق فنی سرویس‌ها:\n{detail[:350]}"
 
     def _discover_gemini_models(self, api_key: str) -> list[str]:
-        """استعلام مستقیم لیست مدل‌های مجاز برای کلید شما از سرور گوگل"""
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
         req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=20) as resp:
@@ -95,27 +94,24 @@ class LLMRouter:
         available = []
         for m in data.get("models", []):
             methods = m.get("supportedGenerationMethods", [])
-            name = m.get("name", "")  # e.g., models/gemini-2.0-flash
+            name = m.get("name", "")
             if "generateContent" in methods and "gemini" in name:
                 short_name = name.replace("models/", "")
-                if "vision" not in short_name and "embedding" not in short_name and "tts" not in short_name:
+                if not any(x in short_name for x in ("vision", "embedding", "tts", "imagen", "aqa")):
                     available.append(short_name)
 
-        # اولویت‌بندی بهترین مدل‌های موجود در اکانت
-        preferred_order = [
+        preferred = [
             "gemini-2.5-flash",
             "gemini-2.0-flash",
-            "gemini-2.0-flash-exp",
+            "gemini-2.0-flash-lite",
             "gemini-1.5-flash",
-            "gemini-1.5-flash-latest",
             "gemini-1.5-pro",
-            "gemini-pro",
         ]
-        sorted_models = [p for p in preferred_order if p in available]
+        sorted_models = [p for p in preferred if p in available]
         for a in available:
             if a not in sorted_models:
                 sorted_models.append(a)
-        return sorted_models or preferred_order
+        return sorted_models or preferred
 
     def _try_gemini_smart(self, text: str, temperature: float, api_key: str) -> tuple[str, str]:
         models_to_try = []
@@ -127,14 +123,11 @@ class LLMRouter:
             for m in discovered:
                 if m not in models_to_try:
                     models_to_try.append(m)
-        except urllib.error.HTTPError as he:
-            err_body = he.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"HTTP {he.code}: {err_body[:120]}")
         except Exception:
-            models_to_try.extend(["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"])
+            models_to_try.extend(["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"])
 
         last_err = ""
-        for model_name in models_to_try[:5]:
+        for model_name in models_to_try[:6]:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
             payload = {
                 "contents": [{"parts": [{"text": text}]}],
@@ -157,13 +150,13 @@ class LLMRouter:
                         return parts[0]["text"].strip(), model_name
             except urllib.error.HTTPError as he:
                 err_body = he.read().decode("utf-8", errors="ignore")
-                last_err = f"{model_name} -> HTTP {he.code}: {err_body[:100]}"
+                last_err = f"{model_name}:{he.code}"
                 continue
             except Exception as e:
-                last_err = f"{model_name} -> {e}"
+                last_err = f"{model_name}:{e}"
                 continue
 
-        raise RuntimeError(last_err or "No Gemini model responded")
+        raise RuntimeError(last_err or "No Gemini model")
 
     def _call_nvidia(self, prompt: str, system_prompt: str, temperature: float, api_key: str) -> str:
         url = "https://integrate.api.nvidia.com/v1/chat/completions"
@@ -196,7 +189,7 @@ class LLMRouter:
                     return ans
             except Exception:
                 continue
-        raise RuntimeError("NVIDIA API failed")
+        raise RuntimeError("NVIDIA failed")
 
     def _call_cloudflare(self, prompt: str, system_prompt: str, account_id: str, api_token: str) -> str:
         model = "@cf/meta/llama-3.1-8b-instruct"
@@ -220,7 +213,7 @@ class LLMRouter:
         res = (data.get("result") or {}).get("response", "").strip()
         if res:
             return res
-        raise RuntimeError("Cloudflare returned empty response")
+        raise RuntimeError("CF empty")
 
     def _call_huggingface(self, full_prompt: str, hf_token: str) -> str:
         url = "https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions"
