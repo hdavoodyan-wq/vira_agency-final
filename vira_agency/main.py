@@ -1,13 +1,12 @@
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
 توسعه‌دهنده: حسین داودیان
-مجهز به منوی کامل تولید استوری گرافیکی، کاروسل‌های سفارشی، ریلز و تحلیل بازار.
+مجهز به وب‌سرور پورت‌یاب رندر و ضدقطعی
 """
 import logging
 import os
 import threading
 import time
-import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
@@ -235,6 +234,7 @@ class ViraTelegramBot:
         await msg.reply_text(reply, reply_markup=self._main_menu())
 
     def run(self):
+        # راه‌اندازی وب‌سرور پورت‌یاب رندر پیش از استارت ربات تلگرام
         t_web = threading.Thread(target=run_web_server, daemon=True)
         t_web.start()
 
