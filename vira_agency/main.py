@@ -1,7 +1,7 @@
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
 توسعه‌دهنده: حسین داودیان
-مجهز به استوری‌ساز کامل، ترندهای روز (ضدتکرار ۳۰ روزه)، و مسیریاب چندموتوره بدون خطا.
+مجهز به منوی کامل تولید استوری، کاروسل‌های سفارشی و ریلز.
 """
 import logging
 import os
@@ -43,25 +43,6 @@ def run_web_server():
     server.serve_forever()
 
 
-def start_self_ping_worker():
-    def pinger():
-        app_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
-        if not app_url:
-            port = os.getenv("PORT", "10000")
-            app_url = f"http://127.0.0.1:{port}"
-        while True:
-            time.sleep(300)
-            try:
-                req = urllib.request.Request(app_url, headers={"User-Agent": "ViraKeepAliveBot"})
-                with urllib.request.urlopen(req, timeout=10):
-                    pass
-            except Exception:
-                pass
-
-    t = threading.Thread(target=pinger, daemon=True)
-    t.start()
-
-
 class ViraTelegramBot:
     def __init__(self):
         self.cfg = AgencyConfig()
@@ -86,39 +67,34 @@ class ViraTelegramBot:
         slug = page["slug"]
         kb = [
             [
-                InlineKeyboardButton("📲 استوری", callback_data=f"act:{slug}:story"),
-                InlineKeyboardButton("🖼️ کاروسل", callback_data=f"act:{slug}:carousel"),
+                InlineKeyboardButton("📲 ساخت استوری تخصصی", callback_data=f"act:{slug}:story"),
+                InlineKeyboardButton("🖼️ ساخت کاروسل", callback_data=f"act:{slug}:carousel"),
             ],
             [InlineKeyboardButton("🎬 ریلز ۵ سکانسی", callback_data=f"act:{slug}:reel")],
         ]
         if slug == "papermache":
-            kb.append([InlineKeyboardButton("💡 ایده‌پرداز ترند پاپیه‌ماشه", callback_data="dept:papermache:idea_hub")])
             kb.append([InlineKeyboardButton("🛠️ مشاور کارگاه (خمیر، چسب، رنگ)", callback_data="dept:papermache:workshop_q")])
         kb.append([InlineKeyboardButton("🔙 تغییر پیج", callback_data="menu:select_page")])
         return InlineKeyboardMarkup(kb)
-
-    def _topic_source_menu(self, slug: str, kind: str) -> InlineKeyboardMarkup:
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔥 ترندهای روز (خودکار و ضدتکرار ۳۰ روزه)", callback_data=f"topic_src:{slug}:{kind}:auto")],
-            [InlineKeyboardButton("✍️ ورود موضوع دلخواه", callback_data=f"topic_src:{slug}:{kind}:custom")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data=f"page_hub:{slug}")],
-        ])
 
     def _story_cats_menu(self, page: dict) -> InlineKeyboardMarkup:
         slug = page["slug"]
         if slug == "trading":
             cats = [
-                ("📈 تحلیل وضعیت بازار و بیت‌کوین", "market"),
-                ("📰 اخبار و رویدادهای ۲۴ ساعت اخیر", "news"),
-                ("🧠 روانشناسی ترید و کنترل طمع", "psych"),
-                ("⚡ چالش لحظه‌ای معامله‌گران", "challenge"),
+                ("📈 تحلیل بازار و وضعیت بیت‌کوین", "t_market"),
+                ("📰 اخبار زنده فارکس و کریپتو", "t_news"),
+                ("⚡ کوییز تریدری (اینجا وارد شویم؟)", "t_quiz"),
+                ("🧠 روانشناسی ترید و کنترل طمع", "t_psyc"),
+                ("🎯 هشدار تله نقدینگی و استاپ‌هانت", "t_hunt"),
+                ("🐂 نبرد حماسی گاو و خرس", "t_bull"),
             ]
         elif slug == "dark_psych":
             cats = [
-                ("🔥 موقعیت چالشی و سوالی", "challenge"),
-                ("🧠 پند عمیق رابطه و رفتار سمی", "tip"),
-                ("🩸 زبان بدن و خواندن ذهن", "body_lang"),
-                ("🎭 تست گزینه‌ای (انتخاب مخاطب)", "quiz"),
+                ("🔥 چالشی و دو راهی اخلاقی (شوالیه)", "d_chal"),
+                ("🧠 پند رابطه و روباه مکار", "d_edu"),
+                ("💍 رازهای تاریک روابط (گرگ)", "d_mar"),
+                ("🎭 تست شخصیت (مسیر تاریک)", "d_opt"),
+                ("🩸 راز زبان بدن (کنت دراکولا)", "d_sec"),
             ]
         else:
             cats = [
@@ -128,8 +104,6 @@ class ViraTelegramBot:
             ]
 
         kb = [[InlineKeyboardButton(label, callback_data=f"st_cat:{key}:{slug}")] for label, key in cats]
-        kb.append([InlineKeyboardButton("🔥 ترند روز استوری (خودکار)", callback_data=f"topic_src:{slug}:story:auto")])
-        kb.append([InlineKeyboardButton("✍️ ورود موضوع دلخواه استوری", callback_data=f"topic_src:{slug}:story:custom")])
         kb.append([InlineKeyboardButton("🔙 بازگشت", callback_data=f"page_hub:{slug}")])
         return InlineKeyboardMarkup(kb)
 
@@ -137,7 +111,7 @@ class ViraTelegramBot:
         context.user_data.clear()
         await update.effective_message.reply_text(
             "سلام! من **«دستیار ویرا»** هستم ✨🤖\n"
-            "آماده‌ام تا هر ۳ پیج تو را به صورت کاملاً حرفه‌ای مدیریت کنم!",
+            "آماده‌ام تا هر ۳ پیج تو را با تم‌های اختصاصی (بنفش سلطنتی ترید و گوتیک تاریک) مدیریت کنم!",
             reply_markup=self._main_menu(),
             parse_mode="Markdown",
         )
@@ -166,100 +140,31 @@ class ViraTelegramBot:
             if page:
                 if kind == "story":
                     await q.edit_message_text(
-                        f"📲 **انتخاب سبک یا موضوع استوری برای «{page['title']}»:**",
+                        f"📲 **انتخاب سبک استوری برای «{page['title']}»:**",
                         reply_markup=self._story_cats_menu(page),
                         parse_mode="Markdown",
                     )
                 else:
-                    kind_label = {"carousel": "کاروسل", "reel": "ریلز"}.get(kind, kind)
-                    await q.edit_message_text(
-                        f"🎯 پیج: *{page['title']}* ({kind_label})\n\nموضوع محتوا چطور انتخاب شود؟",
-                        reply_markup=self._topic_source_menu(slug, kind),
-                        parse_mode="Markdown",
-                    )
+                    context.user_data["vira_task"] = {"slug": slug, "kind": kind}
+                    await q.edit_message_text(f"✍️ موضوع یا درخواست خود را برای ساخت *{kind}* در پیج *{page['title']}* بنویسید:")
         elif data.startswith("st_cat:"):
             _, cat_key, slug = data.split(":")
             page = self.db.get_page_by_slug(slug)
             if page:
                 await q.edit_message_text(f"⏳ دستیار ویرا در حال تولید استوری حرفه‌ای برای پیج «{page['title']}»...")
-                await self._generate_and_send_story(q.message, page, cat_key)
-        elif data.startswith("topic_src:"):
-            _, slug, kind, mode = data.split(":")
-            page = self.db.get_page_by_slug(slug)
-            if not page:
-                return
-
-            if mode == "custom":
-                context.user_data["vira_task"] = {"slug": slug, "kind": kind, "mode": "custom"}
-                await q.edit_message_text(f"✍️ موضوع دلخواه خود را برای «{kind}» در پیج «{page['title']}» بنویسید:")
-            else:
-                await q.edit_message_text("⏳ دستیار ویرا در حال بررسی ترندهای روز و سابقه ۳۰ روز گذشته (ضدتکرار)...")
-                recent_topics = self.db.get_recent_topics(page["id"], limit=30)
-                recent_str = "، ".join(recent_topics) if recent_topics else "هیچ موضوعی ثبت نشده"
-
-                prompt = (
-                    f"تو مدیر محتوای پیج «{page['title']}» با نیش «{page['niche']}» هستی.\n"
-                    f"موضوعات ۳۰ روز گذشته که هرگز نباید تکرار شوند: [{recent_str}]\n"
-                    f"یک موضوع کاملاً جدید، ترند روز و وایرال برای {kind} انتخاب کن و بلافاصله محتوای کامل و حرفه‌ای آن را بنویس."
-                )
+                prompt = f"یک استوری در سبک {cat_key} برای پیج {page['title']} بساز."
                 ans = await self.llm.generate_text(prompt, VIRA_SYSTEM_IDENTITY, slug, temperature=0.8)
-                first_line = ans.splitlines()[0][:80] if ans else "ترند روز"
-                self.db.save_content(page["id"], kind, first_line, {"text": ans, "source": "auto_trend"})
-                await q.message.reply_text(ans, reply_markup=self._department_menu(page))
+                self.db.save_content(page["id"], "story", f"{cat_key}: {ans[:40]}", {"text": ans})
+                await q.message.reply_text(f"✅ **استوری تخصصی آماده شد:**\n\n{ans}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data=f"page_hub:{slug}")]]))
 
         elif data == "dept:trading:market_pulse":
-            await q.edit_message_text("⏳ در حال تحلیل نبض بازار و روانشناسی معامله‌گران...")
+            await q.edit_message_text("⏳ در حال تحلیل نبض بازار و بررسی وضعیت کریپتو...")
             ans = await self.llm.generate_text(
-                "یک گزارش تحلیلی، جذاب و کاربردی برای استوری و پست امروز پیج ترید درباره وضعیت روانی بازار کریپتو، تله‌های نقدینگی و نکات مدیریت سرمایه بنویس.",
+                "یک گزارش تحلیلی، جذاب و کاربردی درباره وضعیت بازار کریپتو، بیت‌کوین و تله‌های نقدینگی بنویس.",
                 VIRA_SYSTEM_IDENTITY,
                 "trading",
             )
             await q.message.reply_text(ans, reply_markup=self._main_menu())
-
-        elif data == "dept:papermache:idea_hub":
-            kb = [
-                [InlineKeyboardButton("📲 ایده استوری فروش و تعامل", callback_data="art_idea:story")],
-                [InlineKeyboardButton("🖼️ ایده کاروسل دکور و معرفی اثر", callback_data="art_idea:carousel")],
-                [InlineKeyboardButton("🎬 ایده ریلز قبل و بعد ساخت", callback_data="art_idea:reel")],
-                [InlineKeyboardButton("🛠️ مشاوره کارگاه پاپیه‌ماشه", callback_data="dept:papermache:workshop_q")],
-                [InlineKeyboardButton("🔙 بازگشت", callback_data="menu:main")],
-            ]
-            await q.edit_message_text("🎨 **ایده‌پرداز تخصصی پاپیه‌ماشه**", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
-        elif data.startswith("art_idea:"):
-            kind = data.split(":")[1]
-            await q.edit_message_text("⏳ دستیار ویرا در حال ایده‌پردازی...")
-            ans = await self.llm.generate_text(
-                f"۵ ایده جذاب، جدید و فروش‌محور {kind} برای پیج مجسمه‌های دست‌ساز پاپیه‌ماشه بده.",
-                VIRA_SYSTEM_IDENTITY,
-                "Art",
-            )
-            await q.message.reply_text(
-                ans,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="dept:papermache:idea_hub")]]),
-            )
-        elif data == "dept:papermache:workshop_q":
-            context.user_data["vira_task"] = {"slug": "papermache", "kind": "workshop", "mode": "custom"}
-            await q.edit_message_text("🛠️ سوالت رو درباره ساخت خمیر، چسب چوب، سمباده یا رنگ‌آمیزی پاپیه‌ماشه بنویس:")
-
-    async def _generate_and_send_story(self, message, page, cat_key):
-        try:
-            recent_topics = self.db.get_recent_topics(page["id"], limit=30)
-            recent_str = "، ".join(recent_topics) if recent_topics else "—"
-            prompt = (
-                f"تو متخصص استوری اینستاگرام برای پیج «{page['title']}» ({page['niche']}) هستی.\n"
-                f"سبک انتخابی: {cat_key}\n"
-                f"موضوعات ۳۰ روز اخیر که نباید تکرار شوند: {recent_str}\n"
-                "یک استوری تک‌صفحه‌ای فوق‌العاده جذاب شامل: ۱. تیتر کوبنده ۲. متن اصلی استوری ۳. سوال یا استیکر تعاملی ۴. پرامپت انگلیسی دقیق تصویر بنویس."
-            )
-            ai_text = await self.llm.generate_text(prompt, VIRA_SYSTEM_IDENTITY, page["slug"], temperature=0.8)
-            self.db.save_content(page["id"], "story", f"{cat_key}: {ai_text[:40]}", {"text": ai_text})
-
-            await message.reply_text(
-                f"✅ **استوری تخصصی آماده شد:**\n\n{ai_text}",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت به منوی پیج", callback_data=f"page_hub:{page['slug']}")]]),
-            )
-        except Exception as e:
-            await message.reply_text(f"❌ خطا در ساخت استوری: {str(e)[:200]}")
 
     async def on_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
@@ -269,25 +174,17 @@ class ViraTelegramBot:
         if active_task:
             context.user_data.pop("vira_task", None)
             slug = active_task.get("slug", "trading")
-            kind = active_task.get("kind", "post")
+            kind = active_task.get("kind", "carousel")
             page = self.db.get_page_by_slug(slug)
 
-            if kind != "workshop":
-                recent_topics = self.db.get_recent_topics(page["id"], limit=30)
-                if any(user_text.lower() == t.lower() for t in recent_topics):
-                    await msg.reply_text(
-                        "⚠️ این موضوع دقیقاً در ۳۰ روز گذشته تولید شده است! لطفاً موضوع جدیدتری بنویسید یا از دکمه ترندهای روز استفاده کنید."
-                    )
-                    return
-                self.db.save_content(page["id"], kind, user_text, {"source": "custom_user"})
-
-            wait = await msg.reply_text(f"⏳ دستیار ویرا در حال آماده‌سازی «{user_text}»...")
+            wait = await msg.reply_text(f"⏳ دستیار ویرا در حال ساخت «{kind}» با موضوع «{user_text}»...")
             ans = await self.llm.generate_text(
-                f"درخواست کاربر برای پیج {page['title']} ({page['niche']}) در قالب {kind}:\n{user_text}",
+                f"محتوای کامل {kind} برای پیج {page['title']} ({page['niche']}) درباره: {user_text}",
                 VIRA_SYSTEM_IDENTITY,
                 slug,
             )
             await wait.delete()
+            self.db.save_content(page["id"], kind, user_text, {"text": ans})
             await msg.reply_text(ans, reply_markup=self._department_menu(page))
             return
 
@@ -299,7 +196,6 @@ class ViraTelegramBot:
     def run(self):
         t_web = threading.Thread(target=run_web_server, daemon=True)
         t_web.start()
-        start_self_ping_worker()
 
         app = Application.builder().token(self.cfg.telegram_token).build()
         app.add_handler(CommandHandler("start", self.cmd_start))
