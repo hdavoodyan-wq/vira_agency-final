@@ -1,11 +1,13 @@
+```python
 """
-مسیریاب هوشمند LLM با اتصال پایدار به مدل‌های فعال و رسمی گوگل
+مسیریاب هوشمند LLM با پشتیبانی از تولید JSON استوری/ریلز و ساخت تصویر با کلودفلر (Flux)
 """
 import asyncio
 import base64
 import json
 import logging
 import os
+import re
 import urllib.request
 import urllib.error
 
@@ -14,11 +16,10 @@ from vira_agency.core.database import AgencyDatabase
 
 log = logging.getLogger(__name__)
 
-# مدل‌های پایداری که دقیقاً در لیست کلید شما موجود هستند
 DEFAULT_GEMINI_MODELS = [
     "gemini-2.5-flash",
     "gemini-2.5-pro",
-    "gemma-4-26b-a4b-it"
+    "gemma-4-26b-a4b-it",
 ]
 
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
@@ -42,12 +43,21 @@ class LLMRouter:
         issues = []
         for model_name in models:
             url = f"{API_ROOT}/models/{model_name}:generateContent?key={api_key}"
-            payload = {
-                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": temperature},
-            }
-            if system_prompt:
-                payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+            
+            # برای مدل‌های خانواده gemma که systemInstruction جداگانه قبول نمی‌کنند، ترکیب در متن انجام می‌شود
+            if "gemma" in model_name.lower() and system_prompt:
+                combined_text = f"{system_prompt}\n\nدرخواست کاربر:\n{prompt}"
+                payload = {
+                    "contents": [{"role": "user", "parts": [{"text": combined_text}]}],
+                    "generationConfig": {"temperature": temperature},
+                }
+            else:
+                payload = {
+                    "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                    "generationConfig": {"temperature": temperature},
+                }
+                if system_prompt:
+                    payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
 
             try:
                 def _call():
@@ -85,32 +95,44 @@ class LLMRouter:
         if not api_key:
             return f"{ERROR_PREFIX} خطا: کلید GEMINI_API_KEY در تنظیمات سرور ثبت نشده است."
 
+        enforced_system = (
+            f"{system_prompt}\n"
+            "قانون مهم: فقط و فقط متن نهایی فارسی را برگردان. هرگز دستورالعمل‌ها، Persona یا توضیحات انگلیسی را در خروجی ننویس."
+        ).strip()
+
         models = self._get_models()
-        ans, issues = await self._try_models(models, prompt, system_prompt, department, temperature, api_key)
+        ans, issues = await self._try_models(models, prompt, enforced_system, department, temperature, api_key)
         if ans:
             return ans
 
-        return f"{ERROR_PREFIX} خطای ارتباط با جمینای: تمامی مدل‌ها بررسی شدند اما پاسخ دریافت نشد. آخرین خطاها: {issues}"
+        return f"{ERROR_PREFIX} خطای ارتباط با جمینای: {issues}"
 
     async def json(self, prompt: str, quality: str = "best", temperature: float = 0.7) -> dict:
-        """متد کمکی برای سازگاری با ایجنت‌ها جهت دریافت خروجی JSON"""
-        raw = await self.generate_text(prompt, system_prompt="Return ONLY valid JSON.", department="Agent", temperature=temperature)
+        """دریافت خروجی JSON استاندارد (برای استوری، کاروسل و ریلز دقیقاً مثل ربات قبلی)"""
+        sys_json = (
+            "You are a professional Persian content generator. "
+            "Output ONLY a valid JSON object. Do not include markdown fences or extra explanations."
+        )
+        api_key = (getattr(self.cfg, "gemini_api_key", "") or "").strip().strip('"').strip("'")
+        models = self._get_models()
+        raw, _ = await self._try_models(models, prompt, sys_json, "JSON_Gen", temperature, api_key)
+        if not raw:
+            return {}
+
         try:
-            cleaned = raw.strip()
-            if cleaned.startswith("```json"):
-                cleaned = cleaned[7:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            return json.loads(cleaned.strip())
-        except Exception:
-            return {"text": raw}
+            # استخراج اولین بلوک JSON از پاسخ مدل
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            cleaned = match.group(0) if match else raw.strip()
+            return json.loads(cleaned)
+        except Exception as e:
+            log.warning("JSON parse failed, building fallback dict: %s", e)
+            return {"heading": "نکته تخصصی روز", "body": raw[:220]}
 
     async def text(self, prompt: str, temperature: float = 0.7) -> str:
-        """متد کمکی برای تولید متن ساده"""
         return await self.generate_text(prompt, temperature=temperature)
 
     async def generate_image(self, prompt: str, output_path: str) -> bool:
-        """تولید تصویر با موتور ابری کلودفلر (فال‌بک خودکار)"""
+        """تولید تصویر با موتور ابری کلودفلر (Flux-1-Schnell) دقیقاً مثل ربات قبلی"""
         cf_account = getattr(self.cfg, "cf_account_id", "")
         cf_token = getattr(self.cfg, "cf_api_token", "")
 
@@ -150,3 +172,4 @@ class LLMRouter:
                 log.warning("Cloudflare image generation failed: %s", e)
 
         return False
+```
