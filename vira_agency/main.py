@@ -5,6 +5,8 @@
 import logging
 import os
 import threading
+import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
@@ -17,7 +19,6 @@ logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", 
 log = logging.getLogger("vira_agency")
 
 
-# وب‌سرور فوق‌سبک داخلی پایتون (بدون نیاز به نصب Flask در requirements.txt) برای باز نگه داشتن پورت Render رایگان
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -30,15 +31,38 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def log_message(self, format, *args):
-        pass  # جلوگیری از شلوغ شدن لاگ‌های رندر
+        pass
 
 
 def run_web_server():
-    # خواندن دقیق پورت اجباری رندر یا پیش‌فرض 10000
     port = int(os.getenv("PORT", "10000"))
     server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    log.info("🚀 Render Web Server forcefully bound and listening on 0.0.0.0:%d", port)
+    log.info("Render Web Server forcefully bound and listening on 0.0.0.0:%d", port)
     server.serve_forever()
+
+
+def start_self_ping_worker():
+    """کارگر پس‌زمینه برای پینگ کردن خودکار ربات هر ۵ دقیقه تا روی رندر رایگان نخوابد."""
+    def pinger():
+        # آدرس وب‌سرور رندر خودت را از روی اسم سرویس یا رندر می‌خواند
+        app_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
+        if not app_url:
+            # اگر متغیر رندر نبود، از لوکال‌پورت استفاده می‌کند
+            port = os.getenv("PORT", "10000")
+            app_url = f"http://127.0.0.1:{port}"
+        
+        log.info("Self-ping worker started targeting: %s", app_url)
+        while True:
+            time.sleep(300)  # هر ۵ دقیقه (۳۰۰ ثانیه) یک‌بار
+            try:
+                req = urllib.request.Request(app_url, headers={"User-Agent": "ViraKeepAliveBot"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    log.info("Self-ping status check: HTTP %d", resp.getcode())
+            except Exception as e:
+                log.warning("Self-ping minor notice: %s", e)
+
+    t = threading.Thread(target=pinger, daemon=True)
+    t.start()
 
 
 class ViraTelegramBot:
@@ -160,15 +184,18 @@ class ViraTelegramBot:
         await msg.reply_text(reply, reply_markup=self._main_menu())
 
     def run(self):
-        # روشن کردن وب‌سرور پورت رندر قبل از شروع ربات تلگرام
-        t = threading.Thread(target=run_web_server, daemon=True)
-        t.start()
+        # روشن کردن وب‌سرور پورت رندر
+        t_web = threading.Thread(target=run_web_server, daemon=True)
+        t_web.start()
+
+        # روشن کردن کارگر خودکار پینگ برای جلوگیری از خوابیدن سرور رایگان
+        start_self_ping_worker()
 
         app = Application.builder().token(self.cfg.telegram_token).build()
         app.add_handler(CommandHandler("start", self.cmd_start))
         app.add_handler(CallbackQueryHandler(self.on_callback))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text_message))
-        log.info("Vira AI Agency Bot started successfully!")
+        log.info("Vira AI Agency Bot started successfully with Keep-Alive Ping!")
         app.run_polling(drop_pending_updates=True)
 
 
