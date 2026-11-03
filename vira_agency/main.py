@@ -1,547 +1,224 @@
 """
-ربات تلگرام آژانس هوشمند «دستیار ویرا»
-نسخه ۱۰۰٪ کامل، خط‌به‌خط، بدون هیچ‌گونه خلاصه‌سازی شامل:
-۱. وب‌سرور سبک سلامت برای پورت ۱۰۰۰۰ جهت فعال و سبز ماندن سرویس در Render
-۲. اتصال پایدار به ایجنت‌های ۳ دپارتمان (ترید، ذهن زیبا، گالری الهه)
-۳. استوری‌های دوگانه جفتی چارت تریدینگ‌ویو (ارسال هماهنگ استوری ۱: سوال و استوری ۲: پاسخ تحلیلی)
-۴. کاروسل‌های ادیتوریال ۱۰۸۰×۱۳۵۰ با انتخاب تعداد اسلاید (۳، ۵، ۷، ۱۰) توسط کاربر
-۵. ذخیره متغیرهای موضوعی در حافظه جهت جلوگیری قطعی از خطای Button_data_invalid تلگرام
-۶. پایپ‌لاین تولید ریلز ۵ سکانسی با تدوین و مسترینگ صدا
-۷. دکمه‌های دوگانه ساخت مجدد و بازگشت به منوی پیج زیر تمام خروجی‌ها
+vira_agency/main.py
+هماهنگ‌کننده مرکزی ربات تلگرام با وب‌سرور سلامت رندر و سیستم تولید محتوای ناظر
 """
 import asyncio
 import io
-import logging
 import os
-import threading
-import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import logging
+from aiohttp import web
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import Conflict, NetworkError
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+from vira_agency.agents.department_agents import DarkPsychAgent, TradingAgent, ArtAgent
+from vira_agency.core.render import render_story_layout, render_carousel_slide
+from vira_agency.core.cloudflare import generate_image
+from vira_agency.core.content_brain import evaluate_quality_score
 
-from vira_agency.core.config import AgencyConfig, VIRA_SYSTEM_IDENTITY
-from vira_agency.core.database import AgencyDatabase
-from vira_agency.core.llm_router import LLMRouter
-from vira_agency.core.orchestrator import ViraOrchestrator
-from vira_agency.agents.department_agents import TradingAgent, DarkPsychAgent, ArtAgent
-from vira_agency.core.render import render_story, render_carousel, render_reel_frame
-from vira_agency.core.video import build_reel
-from vira_agency.core.market_news import get_live_market_summary
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("vira_agency")
 
-logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", level=logging.INFO)
-log = logging.getLogger("vira_agency")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 
-STORY_MENU_TITLES = {
-    # روانشناسی معامله‌گری (@tradebazehn)
-    "t_market": "📈 تحلیل بازار و وضعیت بیت‌کوین",
-    "t_news": "📰 اخبار داغ و رویدادهای زنده",
-    "t_quiz": "⚡ کوییز چارت‌محور تریدینگ‌ویو (استوری ۱ و ۲)",
-    "t_psyc": "🧠 روانشناسی ترید و کنترل طمع",
-    "t_hunt": "🎯 هشدار تله نقدینگی و استاپ‌هانت",
-    "t_bull": "🐂 نبرد حماسی گاو و خرس",
-    # ذهن زیبا (@zehnayetaarik)
-    "d_chal": "🔥 دوراهی شوالیه تاریک",
-    "d_edu": "🦊 فریب و مکر (روباه نقاب‌دار)",
-    "d_mar": "🐺 استقلال عاطفی (گرگ تنها)",
-    "d_opt": "🥀 راز کاریزما و جذابیت (بانوی مرموز)",
-    "d_sec": "🩸 نفوذ و هیپنوتیزم (کنت دراکولا)",
-    # گالری هنری الهه (@elartgallery.ir)
-    "art_mirror": "🪞 آینه موج‌دار وابی‌سابی",
-    "art_decor": "🏺 ظروف دکوراتیو کنسول",
-    "art_sculpture": "🗿 مجسمه فرم آزاد و مینیمال",
-    "behind": "📲 پشت صحنه کارگاه و بسته‌بندی",
-}
+dark_agent = DarkPsychAgent()
+trade_agent = TradingAgent()
+art_agent = ArtAgent()
 
+async def health_check(request):
+    return web.Response(text="OK", status=200)
 
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write("Vira Agency Bot is Live and Healthy! 🚀".encode("utf-8"))
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", health_check)
+    app.router.add_get("/healthz", health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 10000)
+    await site.start()
 
-    def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = "سلام! دستیار هوشمند آژانس ویرا آماده تولید محتواست 🤖✨"
+    kb = [
+        [InlineKeyboardButton("🎨 انتخاب پیج برای تولید محتوا", callback_data="menu_pages")],
+        [InlineKeyboardButton("📈 نبض و تحلیل زنده کریپتو", callback_data="quick_crypto")]
+    ]
+    if update.callback_query:
+        await update.callback_query.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(kb))
+    else:
+        await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(kb))
 
-    def log_message(self, format, *args):
-        pass
-
-
-def run_web_server():
-    port = int(os.getenv("PORT", "10000"))
+async def _safe_show_menu(q, text: str, kb: list):
     try:
-        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-        log.info("Render Web Server listening on 0.0.0.0:%d", port)
-        server.serve_forever()
-    except Exception as e:
-        log.warning("Web server error: %s", e)
+        await q.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
+    except Exception:
+        await q.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
 
+async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    data = q.data
 
-class ViraTelegramBot:
-    def __init__(self):
-        self.cfg = AgencyConfig()
-        self.db = AgencyDatabase(self.cfg.db_path)
-        self.llm = LLMRouter(self.cfg, self.db)
-        self.ceo = ViraOrchestrator(self.cfg, self.db, self.llm)
-
-        # ایجنت‌های تخصصی ۳ دپارتمان
-        self.trading_agent = TradingAgent(self.llm)
-        self.dark_agent = DarkPsychAgent(self.llm)
-        self.art_agent = ArtAgent(self.llm)
-
-    def _get_agent(self, slug: str):
-        s = (slug or "").lower()
-        if "trade" in s or s == "trading":
-            return self.trading_agent
-        elif "dark" in s or "psych" in s:
-            return self.dark_agent
-        return self.art_agent
-
-    async def _post_init_hook(self, application: Application):
-        owner_id = self.cfg.owner_id
-        if owner_id and owner_id > 0:
-            try:
-                await application.bot.send_message(
-                    chat_id=owner_id,
-                    text="🚀 **دستیار ویرا با موفقیت روشن / به‌روزرسانی شد!**\n✅ سرور آنلاین است و آماده دریافت دستورات.",
-                    parse_mode="Markdown",
-                )
-            except Exception as e:
-                log.warning("Startup alert could not be sent: %s", e)
-
-    def _main_menu(self) -> InlineKeyboardMarkup:
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎨 تولید محتوا (انتخاب پیج)", callback_data="menu:select_page")],
-            [InlineKeyboardButton("🪞 کالکشن ترند گالری الهه (آینه و دکور)", callback_data="dept:papermache:idea_hub")],
-            [InlineKeyboardButton("📈 نبض و تحلیل زنده کریپتو", callback_data="dept:trading:market_pulse")],
-        ])
-
-    def _page_selection_menu(self) -> InlineKeyboardMarkup:
-        pages = self.db.get_pages(active_only=True)
-        kb = [[InlineKeyboardButton(p["title"], callback_data=f"page_hub:{p['slug']}")] for p in pages]
-        kb.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="menu:main")])
-        return InlineKeyboardMarkup(kb)
-
-    def _department_menu(self, page: dict) -> InlineKeyboardMarkup:
-        slug = page["slug"]
+    if data == "menu_pages":
         kb = [
-            [
-                InlineKeyboardButton("📲 ساخت استوری تخصصی", callback_data=f"act:{slug}:story"),
-                InlineKeyboardButton("🖼️ ساخت کاروسل ادیتوریال", callback_data=f"car_menu:{slug}"),
-            ],
-            [InlineKeyboardButton("🎬 ساخت ریلز ۵ سکانسی", callback_data=f"reel_menu:{slug}")],
+            [InlineKeyboardButton("📈 روانشناسی معامله‌گری (@tradebazehn)", callback_data="page_trading")],
+            [InlineKeyboardButton("🖤 ذهن زیبا (@zehnayetaarik)", callback_data="page_dark")],
+            [InlineKeyboardButton("🏺 گالری هنری الهه (@elartgallery.ir)", callback_data="page_art")],
+            [InlineKeyboardButton("🔙 بازگشت به خانه", callback_data="nav_home")]
         ]
-        if slug == "papermache":
-            kb.append([InlineKeyboardButton("🪞 معرفی محصولات ترند (آینه، ظروف، مجسمه)", callback_data="dept:papermache:idea_hub")])
-            kb.append([InlineKeyboardButton("🛠️ فرمول‌های کارگاه (خمیر، ضدترک)", callback_data="dept:papermache:workshop_q")])
-        kb.append([InlineKeyboardButton("🔙 تغییر پیج", callback_data="menu:select_page")])
-        return InlineKeyboardMarkup(kb)
+        await _safe_show_menu(q, "پیج مورد نظر را انتخاب کنید:", kb)
 
-    def _story_cats_menu(self, page: dict) -> InlineKeyboardMarkup:
-        slug = page["slug"]
-        if slug == "trading":
-            keys = ["t_quiz", "t_market", "t_news", "t_psyc", "t_hunt", "t_bull"]
-        elif slug == "dark_psych":
-            keys = ["d_chal", "d_edu", "d_mar", "d_opt", "d_sec"]
-        else:
-            keys = ["art_mirror", "art_decor", "art_sculpture", "behind"]
+    elif data == "page_trading":
+        kb = [
+            [InlineKeyboardButton("⚡ کوییز چارت‌محور (استوری ۱ و ۲ پیوسته)", callback_data="quiz_trading")],
+            [InlineKeyboardButton("📚 کاروسل ادیتوریال روانشناسی ترید", callback_data="pick_car_trading")],
+            [InlineKeyboardButton("🔙 بازگشت به پیج‌ها", callback_data="menu_pages")]
+        ]
+        await _safe_show_menu(q, "روانشناسی معامله‌گری (@tradebazehn):", kb)
 
-        kb = [[InlineKeyboardButton(STORY_MENU_TITLES[k], callback_data=f"st_cat:{k}:{slug}")] for k in keys]
-        kb.append([InlineKeyboardButton("🔙 بازگشت به پیج", callback_data=f"page_hub:{slug}")])
-        return InlineKeyboardMarkup(kb)
+    elif data == "page_dark":
+        kb = [
+            [InlineKeyboardButton("📱 استوری دارک (کاراکترهای گوتیک)", callback_data="story_dark")],
+            [InlineKeyboardButton("📚 کاروسل سینمایی ذهن زیبا", callback_data="pick_car_dark")],
+            [InlineKeyboardButton("🔙 بازگشت به پیج‌ها", callback_data="menu_pages")]
+        ]
+        await _safe_show_menu(q, "ذهن زیبا (@zehnayetaarik):", kb)
 
-    def _topic_selection_menu(self, slug: str, kind: str) -> InlineKeyboardMarkup:
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌟 موضوعات ترند خودکار", callback_data=f"gen_auto:{slug}:{kind}")],
-            [InlineKeyboardButton("✍️ انتخاب موضوع توسط کاربر", callback_data=f"gen_manual:{slug}:{kind}")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data=f"page_hub:{slug}")],
-        ])
+    elif data == "page_art":
+        kb = [
+            [InlineKeyboardButton("📱 استوری کالکشن ارگانیک", callback_data="story_art")],
+            [InlineKeyboardButton("📚 کاروسل دکوراسیون و صنایع دستی", callback_data="pick_car_art")],
+            [InlineKeyboardButton("🔙 بازگشت به پیج‌ها", callback_data="menu_pages")]
+        ]
+        await _safe_show_menu(q, "گالری هنری الهه (@elartgallery.ir):", kb)
 
-    def _carousel_slide_count_menu(self, slug: str) -> InlineKeyboardMarkup:
-        """منوی انتخاب اسلاید سبک برای جلوگیری قطعی از ارور Button_data_invalid"""
-        return InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("۳ اسلاید 📑", callback_data=f"car_run:{slug}:3"),
-                InlineKeyboardButton("۵ اسلاید 📑", callback_data=f"car_run:{slug}:5"),
-            ],
-            [
-                InlineKeyboardButton("۷ اسلاید 📑", callback_data=f"car_run:{slug}:7"),
-                InlineKeyboardButton("۱۰ اسلاید (کامل) 📑", callback_data=f"car_run:{slug}:10"),
-            ],
-            [InlineKeyboardButton("🔙 بازگشت به منوی پیج", callback_data=f"page_hub:{slug}")],
-        ])
+    elif data.startswith("pick_car_"):
+        slug = data.replace("pick_car_", "")
+        agent = dark_agent if slug == "dark" else (trade_agent if slug == "trading" else art_agent)
+        topic = agent.get_fresh_trend()
+        context.user_data[f"topic_{slug}"] = topic
 
-    def _result_actions_menu(self, slug: str, kind: str, param: str) -> InlineKeyboardMarkup:
-        short_param = (param or "")[:15]
-        return InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("🔄 ساخت مجدد (یکی دیگه بساز)", callback_data=f"regen:{slug}:{kind}:{short_param}"),
-                InlineKeyboardButton("🔙 بازگشت به منوی پیج", callback_data=f"nav_page:{slug}"),
-            ]
-        ])
+        kb = [
+            [InlineKeyboardButton("۳ اسلاید 📑", callback_data=f"carrun:{slug}:3"), InlineKeyboardButton("۵ اسلاید 📑", callback_data=f"carrun:{slug}:5")],
+            [InlineKeyboardButton("۷ اسلاید 📑", callback_data=f"carrun:{slug}:7"), InlineKeyboardButton("۱۰ اسلاید (کامل) 📑", callback_data=f"carrun:{slug}:10")],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data=f"page_{slug}")]
+        ]
+        await _safe_show_menu(q, f"موضوع ارزیابی‌شده توسط ناظر محتوا:\n«{topic}»\n\nتعداد اسلاید مورد نظر را انتخاب کنید:", kb)
 
-    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        context.user_data.clear()
-        await update.effective_message.reply_text(
-            "سلام! من **«دستیار ویرا»** هستم ✨🤖\n"
-            "مدیرعامل هوشمند آژانس تبلیغاتی شما.\n\n"
-            "جهت شروع، پیج مورد نظرتان را انتخاب کنید:",
-            reply_markup=self._main_menu(),
-            parse_mode="Markdown",
+    elif data.startswith("carrun:"):
+        _, slug, count_str = data.split(":")
+        count = int(count_str)
+        agent = dark_agent if slug == "dark" else (trade_agent if slug == "trading" else art_agent)
+        topic = context.user_data.get(f"topic_{slug}", agent.get_fresh_trend())
+
+        await q.message.reply_text(f"⏳ در حال پردازش کاروسل {count} اسلایدی با سوژه: «{topic}»...")
+        slides = agent.make_carousel(topic, count=count)
+        qa = evaluate_quality_score(slides)
+
+        for s in slides:
+            bg_bytes = await generate_image(s["image_prompt"], width=1080, height=1350)
+            bg_img = None
+            if bg_bytes:
+                from PIL import Image
+                bg_img = Image.open(io.BytesIO(bg_bytes))
+
+            out = render_carousel_slide(bg_img, s["slide_num"], len(slides), s["title"], s["text"], agent.instagram_id)
+            buf = io.BytesIO()
+            out.save(buf, format="JPEG", quality=95)
+            buf.seek(0)
+            await q.message.reply_photo(photo=buf, caption=f"اسلاید {s['slide_num']}: {s['title']}")
+
+        reply_kb = [
+            [InlineKeyboardButton("🔄 ساخت مجدد همین بخش", callback_data=f"pick_car_{slug}")],
+            [InlineKeyboardButton("🔙 بازگشت به منوی پیج", callback_data=f"page_{slug}")]
+        ]
+        status_msg = f"✅ کاروسل {count} اسلایدی با موفقیت منتشر شد.\n📊 ارزیابی کیفی ناظر محتوا: {qa['score']}/100 ({qa['verdict']})"
+        await q.message.reply_text(status_msg, reply_markup=InlineKeyboardMarkup(reply_kb))
+
+    elif data == "quiz_trading":
+        await q.message.reply_text("⏳ در حال ترسیم جفت چارت تریدینگ‌ویو...")
+        quiz_data = trade_agent.make_story_quiz_pair("شکست مقاومت")
+
+        s1 = quiz_data["story_question"]
+        img1 = render_story_layout(s1["raw_image"], s1["badge"], s1["title"], s1["text"], "روانشناسی معامله‌گری", "@tradebazehn")
+        b1 = io.BytesIO()
+        img1.save(b1, format="JPEG", quality=95)
+        b1.seek(0)
+        await q.message.reply_photo(photo=b1, caption=f"⚡ استوری ۱ (سوال):\n{s1['text']}")
+
+        s2 = quiz_data["story_answer"]
+        img2 = render_story_layout(s2["raw_image"], s2["badge"], s2["title"], s2["text"], "روانشناسی معامله‌گری", "@tradebazehn")
+        b2 = io.BytesIO()
+        img2.save(b2, format="JPEG", quality=95)
+        b2.seek(0)
+
+        kb = [
+            [InlineKeyboardButton("🔄 ساخت مجدد کوییز", callback_data="quiz_trading")],
+            [InlineKeyboardButton("🔙 بازگشت به پیج", callback_data="page_trading")]
+        ]
+        await q.message.reply_photo(photo=b2, caption=f"✅ استوری ۲ (پاسخ تحلیلی):\n{s2['text']}", reply_markup=InlineKeyboardMarkup(kb))
+
+    elif data == "story_dark":
+        await q.message.reply_text("⏳ در حال تولید استوری دارک گوتیک...")
+        st = dark_agent.make_story("d_knight")
+        bg_bytes = await generate_image(st["image_prompt"], width=1080, height=1920)
+        bg_img = None
+        if bg_bytes:
+            from PIL import Image
+            bg_img = Image.open(io.BytesIO(bg_bytes))
+        out = render_story_layout(bg_img, st["badge"], st["title"], st["text"], "ذهن زیبا", "@zehnayetaarik")
+        buf = io.BytesIO()
+        out.save(buf, format="JPEG", quality=95)
+        buf.seek(0)
+
+        kb = [
+            [InlineKeyboardButton("🔄 ساخت مجدد استوری", callback_data="story_dark")],
+            [InlineKeyboardButton("🔙 بازگشت به پیج", callback_data="page_dark")]
+        ]
+        await q.message.reply_photo(photo=buf, caption=f"📱 {st['title']}\n{st['text']}", reply_markup=InlineKeyboardMarkup(kb))
+
+    elif data == "story_art":
+        await q.message.reply_text("⏳ در حال تولید استوری کالکشن گالری...")
+        st = art_agent.make_story("art_general")
+        bg_bytes = await generate_image(st["image_prompt"], width=1080, height=1920)
+        bg_img = None
+        if bg_bytes:
+            from PIL import Image
+            bg_img = Image.open(io.BytesIO(bg_bytes))
+        out = render_story_layout(bg_img, st["badge"], st["title"], st["text"], "گالری الهه", "@elartgallery.ir")
+        buf = io.BytesIO()
+        out.save(buf, format="JPEG", quality=95)
+        buf.seek(0)
+
+        kb = [
+            [InlineKeyboardButton("🔄 ساخت مجدد استوری", callback_data="story_art")],
+            [InlineKeyboardButton("🔙 بازگشت به پیج", callback_data="page_art")]
+        ]
+        await q.message.reply_photo(photo=buf, caption=f"🏺 {st['title']}\n{st['text']}", reply_markup=InlineKeyboardMarkup(kb))
+
+    elif data == "quick_crypto":
+        from vira_agency.core.market_news import get_crypto_snapshot
+        data_res = await get_crypto_snapshot()
+        msg = (
+            f"📊 وضعیت زنده بازار کریپتو:\n"
+            f"🔹 قیمت بیت‌کوین: ${data_res.get('btc_price', 0):,.2f}\n"
+            f"🔹 تغییرات ۲۴ ساعت: {data_res.get('btc_change', 0):+.2f}%\n"
+            f"🔹 سقف و کف روزانه: ${data_res.get('btc_high', 0):,.2f} / ${data_res.get('btc_low', 0):,.2f}\n\n"
+            f"📰 تیتر خبر منتخب:\n{data_res.get('news_headline', 'داده‌ای دریافت نشد.')}"
         )
+        kb = [[InlineKeyboardButton("🔙 بازگشت به خانه", callback_data="nav_home")]]
+        await _safe_show_menu(q, msg, kb)
 
-    async def _execute_story_task(self, bot, chat_id, slug: str, cat_key: str):
-        page = self.db.get_page_by_slug(slug)
-        agent = self._get_agent(slug)
+    elif data == "nav_home":
+        await start_cmd(update, context)
 
-        wait_msg = await bot.send_message(chat_id, f"⏳ در حال آماده‌سازی و رندر استوری برای «{page['title']}»...")
-        try:
-            story_res = await agent.make_story(cat_key)
-
-            # استوری جفتی کوییز چارت تریدینگ‌ویو (ارسال هماهنگ استوری ۱ و استوری ۲)
-            if isinstance(story_res, dict) and story_res.get("is_quiz_pair"):
-                out_dir = f"data/outputs/{page['id']}/quiz_{int(time.time())}"
-                os.makedirs(out_dir, exist_ok=True)
-
-                # استوری ۱: سوال
-                await wait_msg.edit_text("⏳ ۱/۲: در حال بارگذاری چارت تریدینگ‌ویو و رندر استوری سوال...")
-                q_data = story_res["question"]
-                q_art = os.path.join(out_dir, "q_art.jpg")
-                img_q_ok = await self.llm.generate_image(q_data["visual"], q_art)
-                q_out = os.path.join(out_dir, "quiz_q.jpg")
-                render_story(None, q_data, q_out, 0, [], None, cat_key, q_art if img_q_ok else None)
-
-                # استوری ۲: پاسخ تحلیلی با خطوط تکنیکال
-                await wait_msg.edit_text("⏳ ۲/۲: در حال ترسیم خطوط تکنیکال شکست چارت و رندر استوری پاسخ...")
-                a_data = story_res["answer"]
-                a_art = os.path.join(out_dir, "a_art.jpg")
-                img_a_ok = await self.llm.generate_image(a_data["visual"], a_art)
-                a_out = os.path.join(out_dir, "quiz_a.jpg")
-                render_story(None, a_data, a_out, 0, [], None, cat_key, a_art if img_a_ok else None)
-
-                await wait_msg.delete()
-
-                # ارسال استوری اول
-                with open(q_out, "rb") as f_q:
-                    await bot.send_photo(
-                        chat_id=chat_id,
-                        photo=f_q,
-                        caption=(
-                            f"⚡ **استوری ۱ (سوال کوییز چارت):**\n\n"
-                            f"{q_data['body']}\n\n"
-                            f"📍 نظرسنجی: {q_data['sticker']}"
-                        ).replace("*", ""),
-                        parse_mode="Markdown",
-                    )
-
-                # ارسال استوری دوم به همراه کلیدهای تعاملی
-                with open(a_out, "rb") as f_a:
-                    await bot.send_photo(
-                        chat_id=chat_id,
-                        photo=f_a,
-                        caption=(
-                            f"🎯 **استوری ۲ (پاسخ تحلیلی چارت):**\n\n"
-                            f"{a_data['body']}"
-                        ).replace("*", ""),
-                        reply_markup=self._result_actions_menu(slug, "story", cat_key),
-                    )
-                return
-
-            # استوری‌های معمولی پیج‌ها
-            out_dir = f"data/outputs/{page['id']}/story_{int(time.time())}"
-            os.makedirs(out_dir, exist_ok=True)
-
-            art_path = os.path.join(out_dir, "art.jpg")
-            v_prompt = story_res.get("visual", "cinematic digital art masterpiece, no text, no speech bubbles")
-            img_ok = await self.llm.generate_image(v_prompt, art_path)
-
-            out_path = os.path.join(out_dir, "story_final.jpg")
-            render_story(None, story_res, out_path, 0, [], None, cat_key, art_path if img_ok else None)
-            self.db.save_content(page["id"], "story", story_res["heading"], {"body": story_res["body"], "file": out_path})
-
-            clean_caption = f"✅ {story_res['heading']}\n\n{story_res['body']}".replace("*", "").replace("_", "")[:950]
-
-            await wait_msg.delete()
-            with open(out_path, "rb") as photo_file:
-                await bot.send_photo(
-                    chat_id=chat_id,
-                    photo=photo_file,
-                    caption=clean_caption,
-                    reply_markup=self._result_actions_menu(slug, "story", cat_key),
-                )
-        except Exception as e:
-            log.error("Error executing story task: %s", e)
-            await wait_msg.edit_text(f"⚠️ خطایی رخ داد: {e}")
-
-    async def _execute_carousel_task(self, bot, chat_id, slug: str, topic: str, count: int = 8):
-        page = self.db.get_page_by_slug(slug)
-        agent = self._get_agent(slug)
-
-        wait = await bot.send_message(chat_id, f"⏳ در حال تصویرسازی و طراحی کاروسل {count} اسلایدی برای «{topic}»...")
-        try:
-            car_data = await agent.make_carousel(topic, count)
-            slides = car_data.get("slides") or []
-
-            out_dir = f"data/outputs/{page['id']}/carousel_{int(time.time())}"
-            os.makedirs(out_dir, exist_ok=True)
-
-            arts = []
-            for idx, s in enumerate(slides):
-                art_file = os.path.join(out_dir, f"art_{idx}.jpg")
-                v_prompt = s.get("visual", "cinematic digital art, no text, no speech bubbles")
-                ok = await self.llm.generate_image(v_prompt, art_file)
-                arts.append(art_file if ok else None)
-
-            files = await asyncio.to_thread(render_carousel, None, slides, out_dir, [], None, arts, slug)
-            await wait.delete()
-
-            for fpath in files:
-                with open(fpath, "rb") as ph:
-                    await bot.send_photo(chat_id=chat_id, photo=ph)
-
-            await bot.send_message(
-                chat_id=chat_id,
-                text=car_data.get("caption", "✅ تمام اسلایدهای کاروسل با موفقیت رندر شدند."),
-                reply_markup=self._result_actions_menu(slug, "carousel", topic[:30]),
-            )
-        except Exception as e:
-            log.error("Error executing carousel task: %s", e)
-            await wait.edit_text(f"⚠️ خطایی در ساخت کاروسل رخ داد: {e}")
-
-    async def _execute_reel_task(self, bot, chat_id, slug: str, topic: str):
-        page = self.db.get_page_by_slug(slug)
-        agent = self._get_agent(slug)
-
-        wait = await bot.send_message(chat_id, f"⏳ در حال طراحی فریم‌ها و تدوین ریلز برای «{topic}»...")
-        try:
-            reel_data = await agent.make_reel(topic)
-            scenes = reel_data.get("scenes") or []
-
-            out_dir = f"data/outputs/{page['id']}/reel_{int(time.time())}"
-            os.makedirs(out_dir, exist_ok=True)
-
-            arts = []
-            for idx, s in enumerate(scenes):
-                art_file = os.path.join(out_dir, f"art_{idx}.jpg")
-                v_prompt = s.get("visual", "cinematic art, no text, no speech bubbles")
-                ok = await self.llm.generate_image(v_prompt, art_file)
-                arts.append(art_file if ok else None)
-
-            frames = []
-            texts = []
-            for i, s in enumerate(scenes):
-                f_path = os.path.join(out_dir, f"frame_{i}.jpg")
-                render_reel_frame(None, s.get("text", ""), f_path, i, [], None, arts[i] if i < len(arts) else None, slug)
-                frames.append(f_path)
-                texts.append(s.get("text", ""))
-
-            video_path = os.path.join(out_dir, "reel_final.mp4")
-            audios = [None] * len(scenes)
-            await asyncio.to_thread(build_reel, frames, audios, texts, video_path)
-
-            await wait.delete()
-            with open(video_path, "rb") as vf:
-                await bot.send_video(
-                    chat_id=chat_id,
-                    video=vf,
-                    caption=reel_data.get("caption", "✅ ریلز ۵ سکانسی آماده شد."),
-                    reply_markup=self._result_actions_menu(slug, "reel", topic[:30]),
-                )
-        except Exception as e:
-            log.error("Error executing reel task: %s", e)
-            await wait.edit_text(f"⚠️ خطایی در تدوین ریلز رخ داد: {e}")
-
-    async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        q = update.callback_query
-        await q.answer()
-        data = q.data or ""
-        chat_id = q.message.chat_id
-
-        async def _safe_show_menu(text: str, reply_markup: InlineKeyboardMarkup):
-            try:
-                await q.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
-            except Exception:
-                await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
-
-        if data == "menu:main":
-            await _safe_show_menu("🏢 **منوی اصلی دستیار ویرا**", self._main_menu())
-
-        elif data == "menu:select_page":
-            await _safe_show_menu("🎯 برای کدام پیج می‌خواهی محتوا بسازی؟", self._page_selection_menu())
-
-        elif data.startswith("page_hub:") or data.startswith("nav_page:"):
-            slug = data.split(":")[1]
-            page = self.db.get_page_by_slug(slug)
-            if page:
-                await _safe_show_menu(
-                    f"✨ **پیج: {page['title']}**\nچه نوع محتوایی می‌خواهی تولید کنی؟",
-                    self._department_menu(page),
-                )
-
-        elif data.startswith("act:") and data.endswith(":story"):
-            slug = data.split(":")[1]
-            page = self.db.get_page_by_slug(slug)
-            if page:
-                await _safe_show_menu(
-                    f"📲 **انتخاب سبک استوری برای «{page['title']}»:**",
-                    self._story_cats_menu(page),
-                )
-
-        elif data.startswith("car_menu:"):
-            slug = data.split(":")[1]
-            page = self.db.get_page_by_slug(slug)
-            await _safe_show_menu(
-                f"🖼️ **ساخت کاروسل اسلایدی برای «{page['title']}»**\nلطفاً نحوه انتخاب موضوع را مشخص کن:",
-                self._topic_selection_menu(slug, "carousel"),
-            )
-
-        elif data.startswith("reel_menu:"):
-            slug = data.split(":")[1]
-            page = self.db.get_page_by_slug(slug)
-            await _safe_show_menu(
-                f"🎬 **ساخت ریلز ۵ سکانسی برای «{page['title']}»**\nلطفاً نحوه انتخاب موضوع را مشخص کن:",
-                self._topic_selection_menu(slug, "reel"),
-            )
-
-        elif data.startswith("gen_auto:"):
-            _, slug, kind = data.split(":")
-            agent = self._get_agent(slug)
-            trend_topic = agent.get_random_trend()
-            if kind == "carousel":
-                context.user_data["car_topic"] = trend_topic
-                await _safe_show_menu(
-                    f"🌟 موضوع ترند انتخاب شد:\n**«{trend_topic}»**\n\n📌 کاروسل چند صفحه‌ای نیاز داری؟",
-                    self._carousel_slide_count_menu(slug),
-                )
-            else:
-                asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, trend_topic))
-
-        elif data.startswith("gen_manual:"):
-            _, slug, kind = data.split(":")
-            context.user_data["vira_task"] = {"slug": slug, "kind": kind}
-            label = "کاروسل تصویری" if kind == "carousel" else "ریلز ۵ سکانسی"
-            await _safe_show_menu(f"✍️ لطفاً موضوع دلخواهت را برای ساخت «{label}» بنویس:", None)
-
-        elif data.startswith("car_run:"):
-            parts = data.split(":")
-            slug = parts[1]
-            slide_count = int(parts[2])
-            topic = context.user_data.get("car_topic")
-            if not topic:
-                agent = self._get_agent(slug)
-                topic = agent.get_random_trend()
-            asyncio.create_task(self._execute_carousel_task(context.bot, chat_id, slug, topic, slide_count))
-
-        elif data.startswith("st_cat:"):
-            _, cat_key, slug = data.split(":")
-            asyncio.create_task(self._execute_story_task(context.bot, chat_id, slug, cat_key))
-
-        elif data.startswith("regen:"):
-            parts = data.split(":")
-            slug = parts[1]
-            kind = parts[2]
-            param = parts[3] if len(parts) > 3 else ""
-            if kind == "story":
-                asyncio.create_task(self._execute_story_task(context.bot, chat_id, slug, param))
-            elif kind == "carousel":
-                agent = self._get_agent(slug)
-                topic = context.user_data.get("car_topic") or agent.get_random_trend()
-                context.user_data["car_topic"] = topic
-                await _safe_show_menu(
-                    f"🔄 ساخت مجدد کاروسل:\n**«{topic}»**\n\n📌 کاروسل چند صفحه‌ای نیاز داری؟",
-                    self._carousel_slide_count_menu(slug),
-                )
-            elif kind == "reel":
-                agent = self._get_agent(slug)
-                topic = param if len(param) > 4 else agent.get_random_trend()
-                asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, topic))
-
-        elif data == "dept:trading:market_pulse":
-            await q.edit_message_text("⏳ در حال دریافت تحلیل زنده بازار و قیمت لحظه‌ای...")
-            agent = self.trading_agent
-            story_res = await agent.make_story("t_market")
-            msg_text = f"📊 **نبض مارکت و تحلیل بیت‌کوین:**\n\n{story_res['body']}"
-            await q.message.reply_text(msg_text, reply_markup=self._main_menu())
-
-        elif data == "dept:papermache:idea_hub":
-            kb = [
-                [InlineKeyboardButton("🪞 آینه موج‌دار وابی‌سابی", callback_data="st_cat:art_mirror:papermache")],
-                [InlineKeyboardButton("🏺 ظروف دکوراتیو و کنسول", callback_data="st_cat:art_decor:papermache")],
-                [InlineKeyboardButton("🗿 مجسمه فرم آزاد و مینیمال", callback_data="st_cat:art_sculpture:papermache")],
-                [InlineKeyboardButton("📲 پشت صحنه و بسته‌بندی", callback_data="st_cat:behind:papermache")],
-                [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="menu:main")],
-            ]
-            await q.edit_message_text("🎨 **کالکشن محصولات ترند گالری هنری الهه**", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
-
-        elif data == "dept:papermache:workshop_q":
-            context.user_data["vira_task"] = {"slug": "papermache", "kind": "workshop"}
-            await q.edit_message_text("🛠️ سوالت را درباره فرمول خمیر، چسب یا روش ضدترک بنویس:")
-
-    async def on_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        msg = update.effective_message
-        chat_id = msg.chat_id
-        user_text = (msg.text or "").strip()
-        active_task = context.user_data.get("vira_task")
-
-        if active_task:
-            context.user_data.pop("vira_task", None)
-            slug = active_task.get("slug", "trading")
-            kind = active_task.get("kind", "carousel")
-
-            if kind == "carousel":
-                context.user_data["car_topic"] = user_text
-                await msg.reply_text(
-                    f"✍️ موضوع شما دریافت شد:\n**«{user_text}»**\n\n📌 کاروسل چند صفحه‌ای نیاز داری؟",
-                    reply_markup=self._carousel_slide_count_menu(slug),
-                    parse_mode="Markdown"
-                )
-                return
-            elif kind == "reel":
-                asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, user_text))
-                return
-            else:
-                page = self.db.get_page_by_slug(slug)
-                wait = await msg.reply_text("⏳ در حال آماده‌سازی پاسخ تخصصی...")
-                ans = await self.llm.generate_text(
-                    f"به عنوان مشاور ارشد پیج «{page['title']}» به این سوال پاسخ کامل و کاربردی بده: {user_text}",
-                    VIRA_SYSTEM_IDENTITY,
-                    slug,
-                )
-                await wait.delete()
-                await msg.reply_text(ans, reply_markup=self._department_menu(page))
-                return
-
-        wait = await msg.reply_text("🤔 ...")
-        reply = await self.ceo.chat_with_vira(user_text)
-        await wait.delete()
-        await msg.reply_text(reply, reply_markup=self._main_menu())
-
-    async def _error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
-        if isinstance(context.error, Conflict):
-            log.warning("Conflict detected during rollout.")
-            await asyncio.sleep(4)
-        elif isinstance(context.error, NetworkError):
-            log.warning("Network blip: %s", context.error)
-        else:
-            log.error("Telegram error caught: %s", context.error)
-
-    def run(self):
-        t_web = threading.Thread(target=run_web_server, daemon=True)
-        t_web.start()
-        time.sleep(0.5)
-
-        app = Application.builder().token(self.cfg.telegram_token).post_init(self._post_init_hook).build()
-        app.add_handler(CommandHandler("start", self.cmd_start))
-        app.add_handler(CallbackQueryHandler(self.on_callback))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text_message))
-        app.add_error_handler(self._error_handler)
-
-        log.info("Vira AI Agency Bot running smoothly!")
-        app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
-
+def main():
+    asyncio.run(start_web_server())
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CallbackQueryHandler(callback_handler))
+    logger.info("دستیار ویرا آنلاین است.")
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    ViraTelegramBot().run()
+    main()
