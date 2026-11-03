@@ -1,6 +1,3 @@
-"""
-ماژول دیتابیس آژانس ویرا با متد کامل بررسی موضوعات اخیر (Anti-Duplication)
-"""
 import json
 import os
 import sqlite3
@@ -59,20 +56,25 @@ class AgencyDatabase:
             conn.executescript(schema)
 
     def _seed_default_departments(self):
+        now = int(time.time())
+        default_pages = [
+            ("trading", "📈 روانشناسی معامله‌گری", "Trading Dept", "روانشناسی ترید، کریپتو و مدیریت ریسک", "@tradebazehn", "قاطع، تحلیلی و تریدری", "{}", now),
+            ("dark_psych", "🖤 ذهن زیبا", "Dark Psych Dept", "روانشناسی تاریک، کاریزما و روابط انسانی", "@zehnayetaarik", "عمیق، مرموز و روانشناختی", "{}", now),
+            ("papermache", "🎨 گالری هنری الهه (ELART GALLERY)", "Art Dept", "مجسمه‌ها، ظروف و آینه‌های دکوراتیو پاپیه‌ماشه", "@elartgallery.ir", "گرم، صمیمی، دکوراتیو و هنرمندانه", "{}", now),
+        ]
         with self._conn() as conn:
-            cur = conn.execute("SELECT COUNT(*) as cnt FROM brand_pages")
-            if cur.fetchone()["cnt"] > 0:
-                return
-            now = int(time.time())
-            default_pages = [
-                ("trading", "📈 ترید و بازارهای مالی", "Trading Dept", "ترید، کریپتو و فارکس", "@tradebazehn", "حرفه‌ای، تحلیلی و قاطع", "{}", now),
-                ("dark_psych", "🖤 روانشناسی تاریک", "Dark Psych Dept", "روانشناسی تاریک و کاریزما", "@tradebazehn", "عمیق، مرموز و فلسفی", "{}", now),
-                ("papermache", "🎨 هنر و مجسمه‌سازی پاپیه‌ماشه", "Art Dept", "ساخت و فروش مجسمه‌های دست‌ساز پاپیه‌ماشه", "@papermache_art", "گرم، صمیمی و هنرمندانه", "{}", now),
-            ]
-            conn.executemany(
-                "INSERT INTO brand_pages (slug, title, department, niche, handle, tone, visual_identity, created_at) VALUES (?,?,?,?,?,?,?,?)",
-                default_pages,
-            )
+            for slug, title, dept, niche, handle, tone, visual, created in default_pages:
+                cur = conn.execute("SELECT id FROM brand_pages WHERE slug=?", (slug,)).fetchone()
+                if cur:
+                    conn.execute(
+                        "UPDATE brand_pages SET title=?, department=?, niche=?, handle=?, tone=? WHERE slug=?",
+                        (title, dept, niche, handle, tone, slug),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO brand_pages (slug, title, department, niche, handle, tone, visual_identity, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                        (slug, title, dept, niche, handle, tone, visual, created),
+                    )
 
     def get_pages(self, active_only: bool = True) -> list[dict[str, Any]]:
         q = "SELECT * FROM brand_pages" + (" WHERE is_active=1" if active_only else "") + " ORDER BY id ASC"
@@ -83,15 +85,6 @@ class AgencyDatabase:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM brand_pages WHERE slug=?", (slug,)).fetchone()
             return dict(row) if row else None
-
-    def get_recent_topics(self, page_id: int, limit: int = 30) -> list[str]:
-        """دریافت موضوعات ۳۰ روز گذشته برای جلوگیری از تکرار محتوا"""
-        with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT topic FROM page_contents WHERE page_id=? ORDER BY id DESC LIMIT ?",
-                (page_id, limit),
-            ).fetchall()
-            return [r["topic"] for r in rows if r["topic"]]
 
     def save_content(self, page_id: int, content_type: str, topic: str, payload: dict, category: str = "") -> int:
         with self._conn() as conn:
