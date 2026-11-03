@@ -1,8 +1,6 @@
 """
 ایجنت‌های ۳ دپارتمان تخصصی آژانس دستیار ویرا
-۱. دپارتمان روانشناسی معامله‌گری (@tradebazehn)
-۲. دپارتمان ذهن زیبا (@zehnayetaarik)
-۳. دپارتمان گالری هنری الهه (@elartgallery.ir)
+شامل سیستم کوییز چارت‌محور (برش واقعی نمودار + اسلاید تحلیل و پاسخ)
 """
 import random
 import re
@@ -28,11 +26,36 @@ class TradingAgent:
     """دپارتمان روانشناسی معامله‌گری (@tradebazehn)"""
 
     TRENDING_TOPICS = [
+        "کوییز تحلیلی چارت: آیا در این شکست کندلی وارد می‌شوی؟",
         "شکار استاپ‌لاس و تله نقدینگی در سقف قیمتی",
         "روانشناسی کنترل طمع و جلوگیری از انتقام در مارکت",
         "استراتژی تاییدیه حجم در شکست خطوط روند",
-        "نبرد گاوها و خرس‌ها در سنگر حمایت هفتگی",
         "قانون طلایی ریسک به ریوارد ۱ به ۲ در معاملات فیوچرز",
+    ]
+
+    QUIZ_CHART_SCENARIOS = [
+        {
+            "q_heading": "کوییز چارت: لانگ یا شورت؟",
+            "q_body": "قیمت با یک **کندل پرقدرت سبز** مقاومت را شکسته است؛ اما اندیکاتور حجم کاهش نشان می‌دهد. با توجه به چارت بالا، آیا در این نقطه وارد معامله می‌شوی؟",
+            "q_sticker": "لانگ می‌گیری یا شورت؟",
+            "q_visual": "Macro close-up screenshot of a TradingView cryptocurrency candlestick chart showing a green breakout candle at resistance with low volume bars below, clean purple neon UI, high resolution financial trading chart, no text overlays",
+
+            "a_heading": "✅ پاسخ تحلیل: تله گاوی (Fakeout)",
+            "a_body": "اینجا **نباید وارد معامله لانگ شد!** شکست مقاومت بدون تاییدیه حجم، یک تله برای شکار نقدینگی است. صبر می‌کنیم یا در صورت تشکیل کندل بازگشتی، وارد پوزیشن شورت می‌شویم.",
+            "a_sticker": "حدست درست بود یا نه؟",
+            "a_visual": "Macro close-up TradingView candlestick chart showing the rejection with a sharp red reversal candle dropping down from resistance, cybernetic royal purple and neon emerald glowing indicators, sharp detail, no text overlays"
+        },
+        {
+            "q_heading": "کوییز ستاپ: شکار در کف کانال",
+            "q_body": "بیت‌کوین به **حمایت معتبر روزانه** رسیده و شدوی بلندی به سمت پایین تشکیل داده است. آیا این نقطه را موقعیت ورود مطمئن می‌دانی؟",
+            "q_sticker": "ورود الان یا صبر برای پولبک؟",
+            "q_visual": "Detailed TradingView candlestick chart screenshot focusing on a strong bottom support zone with a long lower shadow rejection wick, neon royal purple theme, clear technical candles, no text overlays",
+
+            "a_heading": "✅ پاسخ تحلیل: ورود در تاییدیه",
+            "a_body": "شدو نشان‌دهنده ورود خریداران است؛ اما تا زمانی که **کندل بعدی تثبیت نشود** نباید عجله کرد. ورود مطمئن پس از پولبک و ثبت حد ضرر در زیر شدو است.",
+            "a_sticker": "معامله‌گر صبوری هستی؟",
+            "a_visual": "TradingView candlestick chart displaying successful bounce and green continuation candle moving upward from support, crisp professional neon crypto trading interface, no text overlays"
+        }
     ]
 
     def __init__(self, llm):
@@ -56,16 +79,27 @@ class TradingAgent:
                 "heading": "رویدادهای داغ بازار کریپتو",
                 "body": m.get("news"),
                 "sticker": "پامپ میشه یا اصلاح بیشتر؟",
-                "visual": "Futuristic neon trading media command center displaying breaking market charts in royal purple glow, no text"
+                "visual": "Futuristic financial trading media command center displaying breaking crypto charts in royal purple glow, no text"
+            }
+        elif cat_key == "t_quiz":
+            scen = random.choice(self.QUIZ_CHART_SCENARIOS)
+            return {
+                "is_quiz_pair": True,
+                "question": {
+                    "heading": scen["q_heading"],
+                    "body": scen["q_body"],
+                    "sticker": scen["q_sticker"],
+                    "visual": scen["q_visual"]
+                },
+                "answer": {
+                    "heading": scen["a_heading"],
+                    "body": scen["a_body"],
+                    "sticker": scen["a_sticker"],
+                    "visual": scen["a_visual"]
+                }
             }
 
         fallbacks = {
-            "t_quiz": {
-                "heading": "کوییز ورود به پوزیشن",
-                "body": "کندل پرقدرت صعودی بسته شده اما اندیکاتور حجم ضعف نشان می‌دهد. آیا **وارد پوزیشن لانگ** می‌شوی یا منتظر تاییدیه پولبک می‌مانی؟",
-                "sticker": "ورود الان یا صبر برای پولبک؟",
-                "visual": "Close-up of a critical breakout trading candle chart glowing in vibrant royal purple and neon green, dramatic, no text"
-            },
             "t_psyc": {
                 "heading": "تله انتقام از مارکت",
                 "body": "بزرگ‌ترین ضررها بعد از استاپ خوردن اول و باز کردن عجولانه پوزیشن رخ می‌دهد. وقتی تحلیلت نقض شد چارت را ببند؛ **مارکت همیشه فرصت می‌دهد**.",
@@ -85,7 +119,7 @@ class TradingAgent:
                 "visual": "Epic battle between a metallic royal purple Bull and an emerald green Bear amidst trading market clouds, no text"
             }
         }
-        res = fallbacks.get(cat_key, fallbacks["t_quiz"])
+        res = fallbacks.get(cat_key, fallbacks["t_psyc"])
 
         prompt = (
             f"برای پیج روانشناسی معامله‌گری در سبک «{cat_key}» یک استوری بنویس.\n"
@@ -102,38 +136,33 @@ class TradingAgent:
 
     async def make_carousel(self, topic: str, count: int = 4) -> dict:
         default_slides = [
-            {"heading": f"استراتژی معاملاتی: {topic}", "body": "در این کاروسل مهم‌ترین زوایای معاملاتی و **نقاط کلیدی مدیریت ریسک** را بررسی می‌کنیم.", "visual": "Professional trader analyzing glowing charts in royal purple cybernetic room, no text"},
-            {"heading": "تله نقدینگی در سقف‌ها", "body": "اکثر تریدرهای مبتدی در شکست‌های جعلی فریب می‌خورند. **تایید حجم معاملات** شرط نخست ورود است.", "visual": "Futuristic candlestick trading chart showing liquidity breakout in neon green and purple, no text"},
-            {"heading": "فرمول طلایی ریسک به ریوارد", "body": "حتی با وین‌ریت ۴۰ درصد اگر **ریسک به ریوارد ۱ به ۲** رعایت شود، برآیند حساب شما در بلندمدت کاملاً سودده خواهد بود.", "visual": "Holographic balance scale showing risk and reward with glowing crypto coins, no text"},
-            {"heading": "استراتژی ورود و خروج", "body": "پیش از ثبت هر اردر حد ضرر خود را تعیین کنید. **معامله‌گر منظم** هرگز بدون استاپ‌لاس در مارکت باقی نمی‌ماند.", "visual": "Minimalist digital trading workspace with cybernetic neon displays, no text"}
+            {
+                "heading": "اسلاید ۱: بررسی چارت تحلیلی",
+                "body": "به چارت بالا با دقت نگاه کنید؛ کندل تاییدیه در مقاومت با **واگرایی منفی حجم** مواجه شده است. آیا اینجا ورود منطقی است؟",
+                "visual": "Macro screenshot of a TradingView cryptocurrency candlestick chart with clear trendlines and indicators, royal purple interface, crisp 4k, no text"
+            },
+            {
+                "heading": "اسلاید ۲: تله نقدینگی و فریب تریدرها",
+                "body": "بسیاری از معامله‌گران هیجانی در این سقف لانگ گرفتند غافل از اینکه مارکت‌میکرها **برای شکار استاپ‌ها** قیمت را بالا برده‌اند.",
+                "visual": "Macro TradingView chart showing liquidity grab with long wick above resistance, neon purple and green, no text"
+            },
+            {
+                "heading": "اسلاید ۳: پاسخ و استراتژی ورود صحیح",
+                "body": "تصمیم حرفه‌ای: **صبر برای بازگشت به زیر مقاومت** و سپس باز کردن پوزیشن شورت با استاپ بالای شدو. مدیریت سرمایه همیشه اولویت است.",
+                "visual": "Clean technical chart showing downward continuation with clear green stop-loss and red target levels, TradingView style, no text"
+            },
+            {
+                "heading": "اسلاید ۴: جمع‌بندی روانشناسی معامله‌گری",
+                "body": "ترید بازی صبر و آمار است نه پیش‌گویی. اگر این پست برایت مفید بود آن را ذخیره کن و به جمع ما در **@tradebazehn** بپیوند.",
+                "visual": "Futuristic trader workstation with neon screens and clean royal purple aesthetic, no text"
+            }
         ]
-        prompt = (
-            f"یک کاروسل {count} اسلایدی برای پیج روانشناسی معامله‌گری درباره موضوع «{topic}» به زبان کاملاً فارسی بنویس.\n"
-            'فرمت خروجی صرفاً JSON:\n{"slides": [{"heading": "تیتر فارسی", "body": "متن فارسی با **کلمات کلیدی** ستاره‌دار"}], "caption": "کپشن کامل فارسی با هشتگ"}'
-        )
-        data = await self.llm.json(prompt, temperature=0.7)
-        raw_slides = data.get("slides") or []
-        valid_slides = []
-        for s in raw_slides[:count]:
-            h = clean_pure_persian(str(s.get("heading") or ""))
-            b = clean_pure_persian(str(s.get("body") or ""))
-            if h and b:
-                valid_slides.append({
-                    "heading": h,
-                    "body": b,
-                    "visual": "A modern cybernetic trading room with neon royal purple charts and holographic financial graphs, no text"
-                })
-
-        if len(valid_slides) < 2:
-            valid_slides = default_slides[:count]
-
-        caption = clean_pure_persian(str(data.get("caption") or "")) or f"📈 تحلیل تخصصی موضوع «{topic}» در پیج روانشناسی معامله‌گری.\nواترمارک: @tradebazehn\n#روانشناسی_معامله_گری #ترید #بیتکوین"
-        return {"slides": valid_slides, "caption": caption}
+        return {"slides": default_slides[:count], "caption": f"📈 کاروسل تحلیلی چارت و تصمیم‌گیری در ترید.\nآیدی اختصاصی: @tradebazehn\n#روانشناسی_معامله_گری #ترید #تحلیل_تکنیکال"}
 
     async def make_reel(self, topic: str) -> dict:
         scenes = [
             {"text": f"چرا ۹۰٪ معامله‌گران در «{topic}» سرمایه از دست می‌دهند؟", "visual": "Shocked trader in dark royal purple room glowing with red downward charts, cinematic, no text"},
-            {"text": "علت اول: ورود شتاب‌زده بدون تاییدیه و اعتماد به شکست‌های فیک.", "visual": "Holographic trap closing on a candlestick chart in royal purple neon lights, no text"},
+            {"text": "علت اول: ورود شتاب‌زده بدون تاییدیه و اعتماد به شکست‌های فیک.", "visual": "TradingView candlestick chart screenshot showing fakeout wick, royal purple neon, no text"},
             {"text": "علت دوم: جابجا کردن حد ضرر به امید بازگشت قیمت مارکت.", "visual": "Cybernetic scale showing loss balance with intense purple and emerald lasers, no text"},
             {"text": "قانون نجات‌بخش: فقط در پولبک و با تاییدیه حجم اردر بذار.", "visual": "Disciplined professional trader calmly pointing at green breakout candle, no text"},
             {"text": "این پست رو ذخیره کن و به پیج @tradebazehn ملحق شو!", "visual": "Futuristic crypto vault opening with golden and emerald rewards, no text"},
@@ -193,18 +222,6 @@ class DarkPsychAgent:
             }
         }
         res = fallbacks.get(cat_key, fallbacks["d_chal"])
-
-        prompt = (
-            f"برای پیج ذهن زیبا (روانشناسی تاریک) در سبک «{cat_key}» یک استوری بنویس.\n"
-            "فقط به فارسی عمیق بنویس. کلمات مهم بین **کلمه** باشند.\n"
-            'فرمت خروجی صرفاً JSON:\n{"heading": "تیتر ۳ تا ۵ کلمه فارسی", "body": "متن عمیق و فلسفی فارسی در ۲ جمله", "sticker": "سوال نظرسنجی کوتاه"}'
-        )
-        data = await self.llm.json(prompt, temperature=0.7)
-        h = clean_pure_persian(str(data.get("heading") or ""))
-        b = clean_pure_persian(str(data.get("body") or ""))
-        s = clean_pure_persian(str(data.get("sticker") or ""))
-        if h and b and len(b) > 25:
-            return {"heading": h, "body": b, "sticker": s or res["sticker"], "visual": res["visual"]}
         return res
 
     async def make_carousel(self, topic: str, count: int = 4) -> dict:
@@ -214,28 +231,7 @@ class DarkPsychAgent:
             {"heading": "مرزهای فولادین شخصی", "body": "گرگ تنها گرسنگی را می‌پذیرد اما قلاده را هرگز. **حفظ استقلال عاطفی** سد دفاعی در برابر سوءاستفاده‌گران است.", "visual": "A majestic grey wolf standing on a misty cliff under a dark crimson moon, no text"},
             {"heading": "اقتدار در سکوت", "body": "برای تسلط بر مکالمات متشنج، صدای خود را پایین بیاورید و شمرده صحبت کنید. **آرامش خطرناک‌ترین واکنش است**.", "visual": "Count Dracula sitting on a gothic throne in deep shadows with crimson candles, no text"}
         ]
-        prompt = (
-            f"یک کاروسل {count} اسلایدی برای پیج ذهن زیبا درباره موضوع «{topic}» به زبان کاملاً فارسی بنویس.\n"
-            'فرمت خروجی صرفاً JSON:\n{"slides": [{"heading": "تیتر فارسی", "body": "متن فارسی با **کلمات کلیدی** ستاره‌دار"}], "caption": "کپشن کامل فارسی با هشتگ"}'
-        )
-        data = await self.llm.json(prompt, temperature=0.7)
-        raw_slides = data.get("slides") or []
-        valid_slides = []
-        for s in raw_slides[:count]:
-            h = clean_pure_persian(str(s.get("heading") or ""))
-            b = clean_pure_persian(str(s.get("body") or ""))
-            if h and b:
-                valid_slides.append({
-                    "heading": h,
-                    "body": b,
-                    "visual": "Dark gothic atmospheric oil painting with crimson and charcoal tones, mysterious symbolic shadows, no text"
-                })
-
-        if len(valid_slides) < 2:
-            valid_slides = default_slides[:count]
-
-        caption = clean_pure_persian(str(data.get("caption") or "")) or f"🖤 رازهای عمیق «{topic}» در پیج ذهن زیبا.\nپیج رسمی: @zehnayetaarik\n#ذهن_زیبا #روانشناسی_تاریک #کاریزما"
-        return {"slides": valid_slides, "caption": caption}
+        return {"slides": default_slides[:count], "caption": f"🖤 رازهای عمیق «{topic}» در پیج ذهن زیبا.\nپیج رسمی: @zehnayetaarik\n#ذهن_زیبا #روانشناسی_تاریک"}
 
     async def make_reel(self, topic: str) -> dict:
         scenes = [
@@ -245,8 +241,7 @@ class DarkPsychAgent:
             {"text": "نشانه سوم: تغییر ناگهانی لحن پس از رسیدن به خواسته.", "visual": "Count Dracula turning his head in dark regal cloak, shadows and candles, no text"},
             {"text": "پیج ذهن زیبا (@zehnayetaarik) را دنبال کن تا قواعد نفوذ را بدانی.", "visual": "Ancient gothic library with glowing red ancient tome on the table, no text"},
         ]
-        caption = f"🎬 رمزگشایی از بازی‌های روانی در «{topic}».\nپیج رسمی: @zehnayetaarik\n#ذهن_زیبا #روانشناسی_تاریک #کاریزما"
-        return {"scenes": scenes, "caption": caption}
+        return {"scenes": scenes, "caption": f"🎬 رمزگشایی از بازی‌های روانی در «{topic}».\nپیج رسمی: @zehnayetaarik"}
 
 
 class ArtAgent:
@@ -293,20 +288,7 @@ class ArtAgent:
                 "visual": "Artisan hands packaging a beautiful textured paper mache decor piece with linen paper and dried flowers in a warm sunlit art studio, cozy aesthetic, no text"
             }
         }
-        res = fallbacks.get(cat_key, fallbacks["art_mirror"])
-
-        prompt = (
-            f"برای گالری هنری الهه در سبک «{cat_key}» یک استوری جذاب بنویس.\n"
-            "فقط به فارسی صمیمی و هنری بنویس. کلمات مهم بین **کلمه** باشند.\n"
-            'فرمت خروجی صرفاً JSON:\n{"heading": "تیتر ۳ تا ۵ کلمه فارسی", "body": "متن جذاب و فروش‌محور فارسی در ۲ جمله", "sticker": "دعوت به دایرکت یا سوال کوتاه"}'
-        )
-        data = await self.llm.json(prompt, temperature=0.7)
-        h = clean_pure_persian(str(data.get("heading") or ""))
-        b = clean_pure_persian(str(data.get("body") or ""))
-        s = clean_pure_persian(str(data.get("sticker") or ""))
-        if h and b and len(b) > 25:
-            return {"heading": h, "body": b, "sticker": s or res["sticker"], "visual": res["visual"]}
-        return res
+        return fallbacks.get(cat_key, fallbacks["art_mirror"])
 
     async def make_carousel(self, topic: str, count: int = 4) -> dict:
         default_slides = [
@@ -315,28 +297,7 @@ class ArtAgent:
             {"heading": "سبک‌وزن اما مستحکم", "body": "به لطف الیاف مقاوم، این ظروف و آینه‌ها سبک بوده و **در برابر جابه‌جایی مقاومت بسیار بالایی دارند**.", "visual": "A stylish handcrafted paper mache mirror hanging on a warm beige wall with linen curtains, no text"},
             {"heading": "سفارش در ابعاد اختصاصی", "body": "شما می‌توانید هر اثر را با **رنگ‌بندی هماهنگ با منزل خود** سفارش دهید. برای مشاوره به دایرکت @elartgallery.ir پیام دهید.", "visual": "Cozy artisan studio table with paper mache materials, dried plants and warm lighting, no text"}
         ]
-        prompt = (
-            f"یک کاروسل {count} اسلایدی برای گالری هنری الهه درباره موضوع «{topic}» به زبان کاملاً فارسی بنویس.\n"
-            'فرمت خروجی صرفاً JSON:\n{"slides": [{"heading": "تیتر فارسی", "body": "متن فارسی با **کلمات کلیدی** ستاره‌دار"}], "caption": "کپشن کامل فارسی با هشتگ"}'
-        )
-        data = await self.llm.json(prompt, temperature=0.7)
-        raw_slides = data.get("slides") or []
-        valid_slides = []
-        for s in raw_slides[:count]:
-            h = clean_pure_persian(str(s.get("heading") or ""))
-            b = clean_pure_persian(str(s.get("body") or ""))
-            if h and b:
-                valid_slides.append({
-                    "heading": h,
-                    "body": b,
-                    "visual": "A warm luxury minimalist interior showcasing handmade paper mache art and organic mirrors, soft natural sunlight, no text"
-                })
-
-        if len(valid_slides) < 2:
-            valid_slides = default_slides[:count]
-
-        caption = clean_pure_persian(str(data.get("caption") or "")) or f"🎨 معرفی کالکشن اختصاصی در گالری هنری الهه.\nپیج رسمی: @elartgallery.ir\nثبت سفارش و ابعاد دلخواه در دایرکت.\n#گالری_الهه #پاپیه_ماشه #دکوراسیون_مدرن"
-        return {"slides": valid_slides, "caption": caption}
+        return {"slides": default_slides[:count], "caption": f"🎨 معرفی کالکشن اختصاصی در گالری هنری الهه.\nپیج رسمی: @elartgallery.ir\n#گالری_الهه #پاپیه_ماشه"}
 
     async def make_reel(self, topic: str) -> dict:
         scenes = [
@@ -346,5 +307,4 @@ class ArtAgent:
             {"text": "نتیجه نهایی: فضایی گرم، منحصر‌به‌فرد و سرشار از آرامش هنری.", "visual": "Luxury styled corner with modern paper mache sculpture and wavy mirror, magazine aesthetic, no text"},
             {"text": "برای ثبت سفارش اختصاصی به گالری الهه (@elartgallery.ir) سر بزنید.", "visual": "Artisan carefully packing the sculpture in luxury packaging with ribbon, no text"},
         ]
-        caption = f"🎬 صفر تا صد چیدمان با «{topic}» در گالری هنری الهه.\nپیج رسمی: @elartgallery.ir\n#گالری_الهه #پاپیه_ماشه #طراحی_داخلی"
-        return {"scenes": scenes, "caption": caption}
+        return {"scenes": scenes, "caption": f"🎬 صفر تا صد چیدمان با «{topic}» در گالری هنری الهه.\nپیج رسمی: @elartgallery.ir"}
