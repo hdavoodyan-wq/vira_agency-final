@@ -17,6 +17,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import Conflict, NetworkError
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from vira_agency.core.config import AgencyConfig, VIRA_SYSTEM_IDENTITY
@@ -68,9 +69,12 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 def run_web_server():
     port = int(os.getenv("PORT", "10000"))
-    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    log.info("Render Web Server bound on port %d", port)
-    server.serve_forever()
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        log.info("Render Web Server listening immediately on port %d", port)
+        server.serve_forever()
+    except Exception as e:
+        log.warning("Web server bind warning: %s", e)
 
 
 class ViraTelegramBot:
@@ -406,16 +410,29 @@ class ViraTelegramBot:
         await wait.delete()
         await msg.reply_text(reply, reply_markup=self._main_menu())
 
+    async def _error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
+        """مدیریت هوشمند خطاهای تلگرام بدون متوقف شدن ربات"""
+        if isinstance(context.error, Conflict):
+            log.warning("Instance conflict detected during rollout. Waiting for previous instance to exit...")
+            await asyncio.sleep(4)
+        elif isinstance(context.error, NetworkError):
+            log.warning("Network blip: %s", context.error)
+        else:
+            log.error("Telegram error caught: %s", context.error)
+
     def run(self):
         t_web = threading.Thread(target=run_web_server, daemon=True)
         t_web.start()
+        time.sleep(0.5)
 
         app = Application.builder().token(self.cfg.telegram_token).post_init(self._post_init_hook).build()
         app.add_handler(CommandHandler("start", self.cmd_start))
         app.add_handler(CallbackQueryHandler(self.on_callback))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text_message))
+        app.add_error_handler(self._error_handler)
+
         log.info("Vira AI Agency Bot started successfully!")
-        app.run_polling(drop_pending_updates=True)
+        app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
