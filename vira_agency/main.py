@@ -1,6 +1,6 @@
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
-نسخه اصلاح‌شده: استارت خلوت و حل قطعی اجرای دکمه‌های استوری، کاروسل و ریلز
+نسخه اصلاح‌شده: دکمه‌های بازگشت قطعی، اخبار ۱۰۰٪ فارسی و کوییز چارت‌محور دو مرحله‌ای (سوال + پاسخ)
 """
 import asyncio
 import logging
@@ -27,7 +27,7 @@ STORY_MENU_TITLES = {
     # روانشناسی معامله‌گری
     "t_market": "📈 تحلیل بازار و وضعیت بیت‌کوین",
     "t_news": "📰 اخبار داغ و رویدادهای زنده",
-    "t_quiz": "⚡ کوییز تریدری (اینجا وارد شویم؟)",
+    "t_quiz": "⚡ کوییز چارت‌محور (لانگ یا شورت؟)",
     "t_psyc": "🧠 روانشناسی ترید و کنترل طمع",
     "t_hunt": "🎯 هشدار تله نقدینگی و استاپ‌هانت",
     "t_bull": "🐂 نبرد حماسی گاو و خرس",
@@ -75,18 +75,11 @@ class ViraTelegramBot:
         self.db = AgencyDatabase(self.cfg.db_path)
         self.llm = LLMRouter(self.cfg, self.db)
         self.ceo = ViraOrchestrator(self.cfg, self.db, self.llm)
-        # ایجنت‌های محلی برای تضمین دسترسی بی‌وقفه
         self.trading_agent = TradingAgent(self.llm)
         self.dark_agent = DarkPsychAgent(self.llm)
         self.art_agent = ArtAgent(self.llm)
 
     def _get_agent(self, slug: str):
-        """دریافت قطعی ایجنت حتی اگر متد اورکستریتور تغییر نکرده باشد"""
-        if hasattr(self.ceo, "get_department_agent"):
-            try:
-                return self.ceo.get_department_agent(slug)
-            except Exception:
-                pass
         s = (slug or "").lower()
         if "trade" in s or s == "trading":
             return self.trading_agent
@@ -158,13 +151,12 @@ class ViraTelegramBot:
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("🔄 ساخت مجدد (یکی دیگه بساز)", callback_data=f"regen:{slug}:{kind}:{param}"),
-                InlineKeyboardButton("🔙 بازگشت به منوی پیج", callback_data=f"page_hub:{slug}"),
+                InlineKeyboardButton("🔙 بازگشت به منوی پیج", callback_data=f"nav_page:{slug}"),
             ]
         ])
 
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
-        # پیام شروع خلوت، صمیمی و بدون متن‌های اضافه
         await update.effective_message.reply_text(
             "سلام! من **«دستیار ویرا»** هستم ✨🤖\n"
             "مدیرعامل هوشمند آژانس تبلیغاتی شما.\n\n"
@@ -177,21 +169,60 @@ class ViraTelegramBot:
         page = self.db.get_page_by_slug(slug)
         agent = self._get_agent(slug)
 
-        wait_msg = await bot.send_message(chat_id, f"⏳ در حال تصویرسازی و رندر استوری برای «{page['title']}»...")
+        wait_msg = await bot.send_message(chat_id, f"⏳ در حال آماده‌سازی و رندر استوری برای «{page['title']}»...")
         try:
-            story_data = await agent.make_story(cat_key)
+            story_res = await agent.make_story(cat_key)
+
+            # اگر استوری کوییز دو مرحله‌ای چارت بود (استوری اول: سوال / استوری دوم: پاسخ و دلیل)
+            if isinstance(story_res, dict) and story_res.get("is_quiz_pair"):
+                out_dir = f"data/outputs/{page['id']}/quiz_{int(time.time())}"
+                os.makedirs(out_dir, exist_ok=True)
+
+                # ۱. استوری اول (سوال چارت)
+                q_data = story_res["question"]
+                q_art = os.path.join(out_dir, "q_art.jpg")
+                img_q_ok = await self.llm.generate_image(q_data["visual"], q_art)
+                q_out = os.path.join(out_dir, "quiz_q.jpg")
+                render_story(None, q_data, q_out, 0, [], None, cat_key, q_art if img_q_ok else None)
+
+                # ۲. استوری دوم (پاسخ چارت و علت تحلیل)
+                a_data = story_res["answer"]
+                a_art = os.path.join(out_dir, "a_art.jpg")
+                img_a_ok = await self.llm.generate_image(a_data["visual"], a_art)
+                a_out = os.path.join(out_dir, "quiz_a.jpg")
+                render_story(None, a_data, a_out, 0, [], None, cat_key, a_art if img_a_ok else None)
+
+                await wait_msg.delete()
+
+                with open(q_out, "rb") as f_q:
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=f_q,
+                        caption=f"⚡ **استوری ۱ (سوال کوییز چارت):**\n\n{q_data['body']}".replace("*", ""),
+                    )
+
+                with open(a_out, "rb") as f_a:
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=f_a,
+                        caption=f"🎯 **استوری ۲ (پاسخ و تحلیل چارت):**\n\n{a_data['body']}".replace("*", ""),
+                        reply_markup=self._result_actions_menu(slug, "story", cat_key),
+                    )
+                return
+
+            # استوری‌های معمولی
             out_dir = f"data/outputs/{page['id']}/story_{int(time.time())}"
             os.makedirs(out_dir, exist_ok=True)
 
             art_path = os.path.join(out_dir, "art.jpg")
-            v_prompt = story_data.get("visual", "cinematic digital art masterpiece, no text")
+            v_prompt = story_res.get("visual", "cinematic digital art masterpiece, no text")
             img_ok = await self.llm.generate_image(v_prompt, art_path)
 
             out_path = os.path.join(out_dir, "story_final.jpg")
-            render_story(None, story_data, out_path, 0, [], None, cat_key, art_path if img_ok else None)
-            self.db.save_content(page["id"], "story", story_data["heading"], {"body": story_data["body"], "file": out_path})
+            render_story(None, story_res, out_path, 0, [], None, cat_key, art_path if img_ok else None)
+            self.db.save_content(page["id"], "story", story_res["heading"], {"body": story_res["body"], "file": out_path})
 
-            clean_caption = f"✅ {story_data['heading']}\n\n{story_data['body']}".replace("*", "").replace("_", "")[:950]
+            clean_caption = f"✅ {story_res['heading']}\n\n{story_res['body']}".replace("*", "").replace("_", "")[:950]
 
             await wait_msg.delete()
             with open(out_path, "rb") as photo_file:
@@ -293,15 +324,26 @@ class ViraTelegramBot:
             await q.edit_message_text("🏢 **منوی اصلی دستیار ویرا**", reply_markup=self._main_menu(), parse_mode="Markdown")
         elif data == "menu:select_page":
             await q.edit_message_text("🎯 برای کدام پیج می‌خواهی محتوا بسازی؟", reply_markup=self._page_selection_menu())
-        elif data.startswith("page_hub:"):
+
+        # دکمه بازگشت مطمئن به پیج (چه از عکس آمده باشد چه از متن)
+        elif data.startswith("page_hub:") or data.startswith("nav_page:"):
             slug = data.split(":")[1]
             page = self.db.get_page_by_slug(slug)
             if page:
-                await q.edit_message_text(
-                    f"✨ **پیج: {page['title']}**\nچه نوع محتوایی می‌خواهی تولید کنی؟",
-                    reply_markup=self._department_menu(page),
-                    parse_mode="Markdown",
-                )
+                try:
+                    await q.edit_message_text(
+                        f"✨ **پیج: {page['title']}**\nچه نوع محتوایی می‌خواهی تولید کنی؟",
+                        reply_markup=self._department_menu(page),
+                        parse_mode="Markdown",
+                    )
+                except Exception:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"✨ **پیج: {page['title']}**\nچه نوع محتوایی می‌خواهی تولید کنی؟",
+                        reply_markup=self._department_menu(page),
+                        parse_mode="Markdown",
+                    )
+
         elif data.startswith("act:") and data.endswith(":story"):
             slug = data.split(":")[1]
             page = self.db.get_page_by_slug(slug)
@@ -312,7 +354,6 @@ class ViraTelegramBot:
                     parse_mode="Markdown",
                 )
 
-        # منوی انتخاب موضوع کاروسل و ریلز
         elif data.startswith("car_menu:"):
             slug = data.split(":")[1]
             page = self.db.get_page_by_slug(slug)
@@ -330,7 +371,6 @@ class ViraTelegramBot:
                 parse_mode="Markdown",
             )
 
-        # موضوعات ترند خودکار
         elif data.startswith("gen_auto:"):
             _, slug, kind = data.split(":")
             agent = self._get_agent(slug)
@@ -340,19 +380,16 @@ class ViraTelegramBot:
             else:
                 asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, trend_topic))
 
-        # انتخاب موضوع دستی توسط کاربر
         elif data.startswith("gen_manual:"):
             _, slug, kind = data.split(":")
             context.user_data["vira_task"] = {"slug": slug, "kind": kind}
             label = "کاروسل تصویری" if kind == "carousel" else "ریلز ۵ سکانسی"
             await q.edit_message_text(f"✍️ لطفاً موضوع دلخواهت را برای ساخت «{label}» تایپ کن و بفرست:")
 
-        # ساخت استوری با کلیک روی دسته‌ها
         elif data.startswith("st_cat:"):
             _, cat_key, slug = data.split(":")
             asyncio.create_task(self._execute_story_task(context.bot, chat_id, slug, cat_key))
 
-        # دکمه ساخت مجدد (یکی دیگه بساز)
         elif data.startswith("regen:"):
             _, slug, kind, param = data.split(":", 3)
             if kind == "story":
@@ -368,7 +405,7 @@ class ViraTelegramBot:
 
         elif data == "dept:trading:market_pulse":
             await q.edit_message_text("⏳ در حال دریافت تحلیل زنده بازار...")
-            agent = self.ceo.trading_dept
+            agent = self.trading_agent
             story_res = await agent.make_story("t_market")
             msg_text = f"📊 **نبض مارکت و تحلیل بیت‌کوین:**\n\n{story_res['body']}"
             await q.message.reply_text(msg_text, reply_markup=self._main_menu())
