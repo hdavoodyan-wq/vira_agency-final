@@ -1,7 +1,16 @@
-from typing import Any
+"""
+مدیرعامل مرکزی آژانس ویرا (CEO Orchestrator)
+وظایف:
+۱. مدیریت تعاملات و هدایت درخواست‌ها به ۳ دپارتمان تخصصی
+۲. ارائه متد get_department_agent جهت دریافت ایجنت‌های تخصصی
+"""
+import logging
 from vira_agency.core.config import VIRA_SYSTEM_IDENTITY, AgencyConfig
 from vira_agency.core.database import AgencyDatabase
 from vira_agency.core.llm_router import LLMRouter
+from vira_agency.agents.department_agents import TradingAgent, DarkPsychAgent, ArtAgent
+
+log = logging.getLogger(__name__)
 
 
 class ViraOrchestrator:
@@ -10,25 +19,24 @@ class ViraOrchestrator:
         self.db = db
         self.llm = llm
 
-    async def detect_intent(self, user_message: str) -> dict[str, Any]:
-        msg = user_message.strip()
-        lower = msg.lower()
-        target_slug = "unknown"
-        if any(w in lower for w in ("ترید", "بیت‌کوین", "بیتکوین", "چارت", "کندل", "فارکس", "کریپتو", "بازار")):
-            target_slug = "trading"
-        elif any(w in lower for w in ("تاریک", "دراکولا", "سمی", "روانشناسی", "زبان بدن", "رابطه")):
-            target_slug = "dark_psych"
-        elif any(w in lower for w in ("پاپیه", "پاپیه‌ماشه", "پاپیا", "مجسمه", "خمیر", "چسب چوب", "هنر", "دکور")):
-            target_slug = "papermache"
+        self.trading_dept = TradingAgent(llm)
+        self.dark_dept = DarkPsychAgent(llm)
+        self.art_dept = ArtAgent(llm)
 
-        if any(w in lower for w in ("استوری", "story")):
-            return {"intent": "create_story", "target_page_slug": target_slug, "topic": msg}
-        if any(w in lower for w in ("کاروسل", "پست", "اسلاید", "carousel")):
-            return {"intent": "create_carousel", "target_page_slug": target_slug, "topic": msg}
-        if any(w in lower for w in ("ریلز", "ویدیو", "reel", "کلیپ")):
-            return {"intent": "create_reel", "target_page_slug": target_slug, "topic": msg}
-        return {"intent": "chat", "target_page_slug": target_slug, "topic": msg}
+    def get_department_agent(self, slug: str):
+        """ارجاع مستقیم به ایجنت دپارتمان مربوطه بر اساس اسلاگ پیج"""
+        s = (slug or "").lower()
+        if "trade" in s or s == "trading":
+            return self.trading_dept
+        elif "dark" in s or "psych" in s:
+            return self.dark_dept
+        elif "art" in s or "paper" in s or "mache" in s:
+            return self.art_dept
+        return self.trading_dept
 
     async def chat_with_vira(self, user_message: str) -> str:
-        prompt = f"کاربر می‌گوید: «{user_message}»\nبه عنوان دستیار ویرا با لحنی بامزه، دوستانه و باهوش پاسخ بده."
+        prompt = (
+            f"کاربر می‌گوید: «{user_message}»\n"
+            "به عنوان «دستیار ویرا»، مدیر ارشد آژانس دیجیتال مارکتینگ، با لحنی صمیمی، باهوش و حرفه‌ای به زبان فارسی پاسخ بده."
+        )
         return await self.llm.generate_text(prompt=prompt, system_prompt=VIRA_SYSTEM_IDENTITY, department="CEO_Chat")
