@@ -316,59 +316,87 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
 
 
 def render_carousel(brand, slides, out_dir, bgs, logo, arts=None, slug="trading"):
-    """رندر کاروسل استاندارد ۱۰۸۰ در ۱۳۵۰ ادیتوریال"""
+    """رندر کاروسل استاندارد ۱۰۸۰ در ۱۳۵۰ بر اساس اصول ادیتوریال و پوستر مدرن بدون کادر قدیمی"""
     os.makedirs(out_dir, exist_ok=True)
     theme = _get_theme(slug)
-    font_head = _load_font(46)
+    slug_low = (slug or "").lower()
+    is_dark = "dark" in slug_low or slug_low.startswith("d_")
+    is_trade = "trad" in slug_low or slug_low.startswith("t_")
+
+    font_head = _load_font(50)
     font_body = _load_font(36)
     font_wm = _load_font(26)
+    font_num = _load_font(30)
 
     paths = []
+    total_slides = len(slides)
+
     for i, s in enumerate(slides):
         p = os.path.join(out_dir, f"slide_{i+1:02d}.jpg")
         art_path = arts[i] if (arts and i < len(arts)) else None
 
+        # پایه بوم تصویری یا گرادیانت غنی
         if art_path and os.path.exists(art_path) and os.path.getsize(art_path) > 500:
             raw_img = Image.open(art_path).convert("RGBA")
             base_img = _fit_image_preserve_aspect(raw_img, 1080, 1350)
         else:
-            base_img = Image.new("RGBA", (1080, 1350), color=theme["glass_tint"][:3] + (255,))
+            # ایجاد پس‌زمینه ادیتوریال غنی نوری به جای بوم سیاه خالی
+            base_img = Image.new("RGBA", (1080, 1350), (10, 12, 18, 255))
+            bdraw = ImageDraw.Draw(base_img)
+            top_color = (25, 16, 45) if is_trade else ((35, 10, 15) if is_dark else (30, 24, 18))
+            bot_color = (8, 9, 14)
+            for y in range(1350):
+                ratio = y / 1350.0
+                r = int(top_color[0] * (1 - ratio) + bot_color[0] * ratio)
+                g = int(top_color[1] * (1 - ratio) + bot_color[1] * ratio)
+                b = int(top_color[2] * (1 - ratio) + bot_color[2] * ratio)
+                bdraw.line([(0, y), (1080, y)], fill=(r, g, b, 255))
 
-        crop_box = (40, 720, 1040, 1300)
-        lower_crop = base_img.crop(crop_box)
-        blurred_lower = lower_crop.filter(ImageFilter.GaussianBlur(radius=20))
-        base_img.paste(blurred_lower, crop_box)
-
+        # گرادیانت محو سینمایی پایین برای خوانایی عالی تایپوگرافی
         overlay = Image.new("RGBA", (1080, 1350), (0, 0, 0, 0))
         d_overlay = ImageDraw.Draw(overlay)
-        d_overlay.rounded_rectangle([45, 730, 1035, 1280], radius=38, fill=theme["glass_tint"], outline=theme["border"], width=3)
+        for y in range(600, 1350):
+            factor = (y - 600) / 750.0
+            alpha = int((factor ** 1.5) * 235)
+            d_overlay.line([(0, y), (1080, y)], fill=(6, 8, 12, alpha))
 
         final_canvas = Image.alpha_composite(base_img, overlay).convert("RGB")
         draw = ImageDraw.Draw(final_canvas)
 
-        heading = str(s.get("heading") or f"اسلاید {i+1}")
-        body = str(s.get("body") or "")
+        # شماره اسلاید ادیتوریال در بالای صفحه
+        slide_counter = f"0{i+1} / 0{total_slides}" if total_slides < 10 else f"{i+1} / {total_slides}"
+        draw.text((90, 85), slide_counter, fill=(180, 185, 200), font=font_num, anchor="la")
 
+        heading = str(s.get("heading") or f"اسلاید {i+1}").strip()
+        body = str(s.get("body") or "").strip()
+
+        # تیتر ادیتوریال درشت
         head_tokens = _tokenize_text(heading)
-        head_lines = _wrap_tokens(head_tokens, font_head, max_width_px=890)
-        y_c = 770
+        head_lines = _wrap_tokens(head_tokens, font_head, max_width_px=900)
+        y_cursor = 820
         for hl in head_lines[:2]:
-            _draw_rich_persian_line(draw, hl, 975, y_c, font_head, theme["text"], theme["accent"])
-            y_c += 64
+            _draw_rich_persian_line(draw, hl, 990, y_cursor, font_head, (255, 255, 255), theme["accent"])
+            y_cursor += 70
 
-        y_c += 12
-        draw.line([(95, y_c), (975, y_c)], fill=theme["border"][:3], width=2)
-        y_c += 22
+        # خط تأکید مینیمال زیر تیتر
+        y_cursor += 15
+        accent_line_color = (220, 38, 38) if is_dark else (theme["border"][:3])
+        draw.line([(850, y_cursor), (990, y_cursor)], fill=accent_line_color, width=4)
+        y_cursor += 40
 
+        # متن روان و خوانا
         body_tokens = _tokenize_text(body)
-        body_lines = _wrap_tokens(body_tokens, font_body, max_width_px=890)
-        for bl in body_lines[:5]:
-            _draw_rich_persian_line(draw, bl, 975, y_c, font_body, theme["sub"], theme["accent"])
-            y_c += 56
+        body_lines = _wrap_tokens(body_tokens, font_body, max_width_px=900)
+        for bl in body_lines[:4]:
+            _draw_rich_persian_line(draw, bl, 990, y_cursor, font_body, (226, 232, 240), theme["accent"])
+            y_cursor += 62
 
-        draw.text((540, 1315), _shape_persian(f"{theme['watermark']}  •  {i+1}/{len(slides)}"), fill=theme["accent"], font=font_wm, anchor="ma")
-        final_canvas.save(p, quality=94)
+        # فوتر ادیتوریال مینیمال
+        draw.text((540, 1285), _shape_persian(theme["watermark"]), fill=(160, 165, 180), font=font_wm, anchor="ma")
+
+        final_canvas.save(p, quality=95)
         paths.append(p)
+
     return paths
 
 
