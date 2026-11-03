@@ -1,14 +1,6 @@
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
-شامل اسامی و آیدی‌های رسمی ۳ پیج:
-۱. روانشناسی معامله‌گری (@tradebazehn)
-۲. ذهن زیبا (@zehnayetaarik)
-۳. گالری هنری الهه (ELART GALLERY) (@elartgallery.ir)
-
-دارای:
-- منوی سه‌گزینه‌ای انتخاب موضوع برای کاروسل و ریلز
-- دکمه‌های بازگشت و ساخت مجدد زیر تمام خروجی‌ها
-- اتصال مستقیم به ایجنت‌های تخصصی ۳ دپارتمان
+نسخه اصلاح‌شده: استارت خلوت و حل قطعی اجرای دکمه‌های استوری، کاروسل و ریلز
 """
 import asyncio
 import logging
@@ -24,6 +16,7 @@ from vira_agency.core.config import AgencyConfig, VIRA_SYSTEM_IDENTITY
 from vira_agency.core.database import AgencyDatabase
 from vira_agency.core.llm_router import LLMRouter
 from vira_agency.core.orchestrator import ViraOrchestrator
+from vira_agency.agents.department_agents import TradingAgent, DarkPsychAgent, ArtAgent
 from vira_agency.core.render import render_story, render_carousel, render_reel_frame
 from vira_agency.core.video import build_reel
 
@@ -45,10 +38,10 @@ STORY_MENU_TITLES = {
     "d_opt": "🥀 راز کاریزما و جذابیت (بانوی مرموز)",
     "d_sec": "🩸 نفوذ و هیپنوتیزم (کنت دراکولا)",
     # گالری هنری الهه
-    "art_mirror": "🪞 آینه موج‌دار وابی‌سابی (ترند دکور)",
-    "art_decor": "🏺 ظروف و کاسه‌های دکوراتیو کنسول",
+    "art_mirror": "🪞 آینه موج‌دار وابی‌سابی",
+    "art_decor": "🏺 ظروف دکوراتیو کنسول",
     "art_sculpture": "🗿 مجسمه فرم آزاد و مینیمال",
-    "behind": "📲 پشت صحنه سفارشات و گالری",
+    "behind": "📲 پشت صحنه و بسته‌بندی",
 }
 
 
@@ -57,7 +50,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write("Vira Agency Bot is running live and active! 🚀".encode("utf-8"))
+        self.wfile.write("Vira Bot Live 🚀".encode("utf-8"))
 
     def do_HEAD(self):
         self.send_response(200)
@@ -71,10 +64,9 @@ def run_web_server():
     port = int(os.getenv("PORT", "10000"))
     try:
         server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-        log.info("Render Web Server listening immediately on port %d", port)
         server.serve_forever()
     except Exception as e:
-        log.warning("Web server bind warning: %s", e)
+        log.warning("Web server error: %s", e)
 
 
 class ViraTelegramBot:
@@ -83,22 +75,36 @@ class ViraTelegramBot:
         self.db = AgencyDatabase(self.cfg.db_path)
         self.llm = LLMRouter(self.cfg, self.db)
         self.ceo = ViraOrchestrator(self.cfg, self.db, self.llm)
+        # ایجنت‌های محلی برای تضمین دسترسی بی‌وقفه
+        self.trading_agent = TradingAgent(self.llm)
+        self.dark_agent = DarkPsychAgent(self.llm)
+        self.art_agent = ArtAgent(self.llm)
+
+    def _get_agent(self, slug: str):
+        """دریافت قطعی ایجنت حتی اگر متد اورکستریتور تغییر نکرده باشد"""
+        if hasattr(self.ceo, "get_department_agent"):
+            try:
+                return self.ceo.get_department_agent(slug)
+            except Exception:
+                pass
+        s = (slug or "").lower()
+        if "trade" in s or s == "trading":
+            return self.trading_agent
+        elif "dark" in s or "psych" in s:
+            return self.dark_agent
+        return self.art_agent
 
     async def _post_init_hook(self, application: Application):
-        """ارسال خودکار پیام به ادمین هنگام روشن شدن یا به‌روزرسانی سرور"""
         owner_id = self.cfg.owner_id
         if owner_id and owner_id > 0:
             try:
                 await application.bot.send_message(
                     chat_id=owner_id,
-                    text="🚀 **دستیار ویرا با موفقیت به‌روزرسانی / روشن شد!**\n\n"
-                         "✅ سرور آنلاین است و آماده دریافت دستورات.\n"
-                         "🔗 وضعیت سیستم: پایدار و فعال.",
+                    text="🚀 **دستیار ویرا آماده به کار شد!**\n✅ سرور آنلاین است.",
                     parse_mode="Markdown",
                 )
-                log.info("Startup notification sent to owner %d", owner_id)
             except Exception as e:
-                log.warning("Could not send startup notification: %s", e)
+                log.warning("Startup alert failed: %s", e)
 
     def _main_menu(self) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup([
@@ -142,7 +148,6 @@ class ViraTelegramBot:
         return InlineKeyboardMarkup(kb)
 
     def _topic_selection_menu(self, slug: str, kind: str) -> InlineKeyboardMarkup:
-        """منوی سه‌گزینه‌ای انتخاب موضوع برای کاروسل و ریلز"""
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("🌟 موضوعات ترند خودکار", callback_data=f"gen_auto:{slug}:{kind}")],
             [InlineKeyboardButton("✍️ انتخاب موضوع توسط کاربر", callback_data=f"gen_manual:{slug}:{kind}")],
@@ -150,7 +155,6 @@ class ViraTelegramBot:
         ])
 
     def _result_actions_menu(self, slug: str, kind: str, param: str) -> InlineKeyboardMarkup:
-        """دکمه‌های دوقلو زیر تمام خروجی‌ها: ساخت مجدد و بازگشت"""
         return InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("🔄 ساخت مجدد (یکی دیگه بساز)", callback_data=f"regen:{slug}:{kind}:{param}"),
@@ -160,122 +164,130 @@ class ViraTelegramBot:
 
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
+        # پیام شروع خلوت، صمیمی و بدون متن‌های اضافه
         await update.effective_message.reply_text(
             "سلام! من **«دستیار ویرا»** هستم ✨🤖\n"
-            "مدیرعامل هوشمند آژانس تبلیغاتی؛ آماده تولید محتوا برای ۳ پیج:\n"
-            "• روانشناسی معامله‌گری (@tradebazehn)\n"
-            "• ذهن زیبا (@zehnayetaarik)\n"
-            "• گالری هنری الهه (@elartgallery.ir)",
+            "مدیرعامل هوشمند آژانس تبلیغاتی شما.\n\n"
+            "از دکمه‌های زیر بخش مورد نظرتان را انتخاب کنید:",
             reply_markup=self._main_menu(),
             parse_mode="Markdown",
         )
 
-    async def _produce_and_send_story(self, q_or_msg, slug: str, cat_key: str):
+    async def _execute_story_task(self, bot, chat_id, slug: str, cat_key: str):
         page = self.db.get_page_by_slug(slug)
-        agent = self.ceo.get_department_agent(slug)
+        agent = self._get_agent(slug)
 
-        wait_msg = await (q_or_msg.message.reply_text if hasattr(q_or_msg, "message") else q_or_msg.reply_text)(
-            f"⏳ در حال تصویرسازی و رندر استوری برای «{page['title']}»..."
-        )
+        wait_msg = await bot.send_message(chat_id, f"⏳ در حال تصویرسازی و رندر استوری برای «{page['title']}»...")
+        try:
+            story_data = await agent.make_story(cat_key)
+            out_dir = f"data/outputs/{page['id']}/story_{int(time.time())}"
+            os.makedirs(out_dir, exist_ok=True)
 
-        story_data = await agent.make_story(cat_key)
-        out_dir = f"data/outputs/{page['id']}/story_{int(time.time())}"
-        os.makedirs(out_dir, exist_ok=True)
+            art_path = os.path.join(out_dir, "art.jpg")
+            v_prompt = story_data.get("visual", "cinematic digital art masterpiece, no text")
+            img_ok = await self.llm.generate_image(v_prompt, art_path)
 
-        art_path = os.path.join(out_dir, "art.jpg")
-        img_ok = await self.llm.generate_image(story_data["visual"], art_path)
+            out_path = os.path.join(out_dir, "story_final.jpg")
+            render_story(None, story_data, out_path, 0, [], None, cat_key, art_path if img_ok else None)
+            self.db.save_content(page["id"], "story", story_data["heading"], {"body": story_data["body"], "file": out_path})
 
-        out_path = os.path.join(out_dir, "story_final.jpg")
-        render_story(None, story_data, out_path, 0, [], None, cat_key, art_path if img_ok else None)
-        self.db.save_content(page["id"], "story", story_data["heading"], {"body": story_data["body"], "file": out_path})
+            clean_caption = f"✅ {story_data['heading']}\n\n{story_data['body']}".replace("*", "").replace("_", "")[:950]
 
-        clean_caption = f"✅ {story_data['heading']}\n\n{story_data['body']}".replace("*", "").replace("_", "")[:950]
+            await wait_msg.delete()
+            with open(out_path, "rb") as photo_file:
+                await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo_file,
+                    caption=clean_caption,
+                    reply_markup=self._result_actions_menu(slug, "story", cat_key),
+                )
+        except Exception as e:
+            log.error("Error executing story task: %s", e)
+            await wait_msg.edit_text(f"⚠️ خطایی رخ داد: {e}")
 
-        await wait_msg.delete()
-        with open(out_path, "rb") as photo_file:
-            target = q_or_msg.message if hasattr(q_or_msg, "message") else q_or_msg
-            await target.reply_photo(
-                photo=photo_file,
-                caption=clean_caption,
-                reply_markup=self._result_actions_menu(slug, "story", cat_key),
+    async def _execute_carousel_task(self, bot, chat_id, slug: str, topic: str, count: int = 4):
+        page = self.db.get_page_by_slug(slug)
+        agent = self._get_agent(slug)
+
+        wait = await bot.send_message(chat_id, f"⏳ در حال تصویرسازی و ساخت کاروسل {count} اسلایدی برای «{topic}»...")
+        try:
+            car_data = await agent.make_carousel(topic, count)
+            slides = car_data.get("slides") or []
+
+            out_dir = f"data/outputs/{page['id']}/carousel_{int(time.time())}"
+            os.makedirs(out_dir, exist_ok=True)
+
+            arts = []
+            for idx, s in enumerate(slides):
+                art_file = os.path.join(out_dir, f"art_{idx}.jpg")
+                v_prompt = s.get("visual", "cinematic digital art, no text")
+                ok = await self.llm.generate_image(v_prompt, art_file)
+                arts.append(art_file if ok else None)
+
+            files = await asyncio.to_thread(render_carousel, None, slides, out_dir, [], None, arts, slug)
+            await wait.delete()
+
+            for fpath in files:
+                with open(fpath, "rb") as ph:
+                    await bot.send_photo(chat_id=chat_id, photo=ph)
+
+            await bot.send_message(
+                chat_id=chat_id,
+                text=car_data.get("caption", "✅ کاروسل آماده شد."),
+                reply_markup=self._result_actions_menu(slug, "carousel", topic[:30]),
             )
+        except Exception as e:
+            log.error("Error executing carousel task: %s", e)
+            await wait.edit_text(f"⚠️ خطایی در ساخت کاروسل رخ داد: {e}")
 
-    async def _produce_and_send_carousel(self, q_or_msg, slug: str, topic: str, count: int = 4):
+    async def _execute_reel_task(self, bot, chat_id, slug: str, topic: str):
         page = self.db.get_page_by_slug(slug)
-        agent = self.ceo.get_department_agent(slug)
+        agent = self._get_agent(slug)
 
-        target = q_or_msg.message if hasattr(q_or_msg, "message") else q_or_msg
-        wait = await target.reply_text(f"⏳ در حال تصویرسازی و ساخت کاروسل {count} اسلایدی برای «{topic}»...")
+        wait = await bot.send_message(chat_id, f"⏳ در حال تولید فریم‌ها و تدوین ریلز برای «{topic}»...")
+        try:
+            reel_data = await agent.make_reel(topic)
+            scenes = reel_data.get("scenes") or []
 
-        car_data = await agent.make_carousel(topic, count)
-        slides = car_data.get("slides") or []
+            out_dir = f"data/outputs/{page['id']}/reel_{int(time.time())}"
+            os.makedirs(out_dir, exist_ok=True)
 
-        out_dir = f"data/outputs/{page['id']}/carousel_{int(time.time())}"
-        os.makedirs(out_dir, exist_ok=True)
+            arts = []
+            for idx, s in enumerate(scenes):
+                art_file = os.path.join(out_dir, f"art_{idx}.jpg")
+                v_prompt = s.get("visual", "cinematic art, no text")
+                ok = await self.llm.generate_image(v_prompt, art_file)
+                arts.append(art_file if ok else None)
 
-        arts = []
-        for idx, s in enumerate(slides):
-            art_file = os.path.join(out_dir, f"art_{idx}.jpg")
-            v_prompt = s.get("visual", "cinematic digital art, no text")
-            ok = await self.llm.generate_image(v_prompt, art_file)
-            arts.append(art_file if ok else None)
+            frames = []
+            texts = []
+            for i, s in enumerate(scenes):
+                f_path = os.path.join(out_dir, f"frame_{i}.jpg")
+                render_reel_frame(None, s.get("text", ""), f_path, i, [], None, arts[i] if i < len(arts) else None, slug)
+                frames.append(f_path)
+                texts.append(s.get("text", ""))
 
-        files = await asyncio.to_thread(render_carousel, None, slides, out_dir, [], None, arts, slug)
-        await wait.delete()
+            video_path = os.path.join(out_dir, "reel_final.mp4")
+            audios = [None] * len(scenes)
+            await asyncio.to_thread(build_reel, frames, audios, texts, video_path)
 
-        for fpath in files:
-            with open(fpath, "rb") as ph:
-                await target.reply_photo(photo=ph)
-
-        await target.reply_text(
-            car_data.get("caption", "✅ کاروسل آماده شد."),
-            reply_markup=self._result_actions_menu(slug, "carousel", topic[:30]),
-        )
-
-    async def _produce_and_send_reel(self, q_or_msg, slug: str, topic: str):
-        page = self.db.get_page_by_slug(slug)
-        agent = self.ceo.get_department_agent(slug)
-
-        target = q_or_msg.message if hasattr(q_or_msg, "message") else q_or_msg
-        wait = await target.reply_text(f"⏳ در حال تولید فریم‌ها و تدوین ریلز برای «{topic}»...")
-
-        reel_data = await agent.make_reel(topic)
-        scenes = reel_data.get("scenes") or []
-
-        out_dir = f"data/outputs/{page['id']}/reel_{int(time.time())}"
-        os.makedirs(out_dir, exist_ok=True)
-
-        arts = []
-        for idx, s in enumerate(scenes):
-            art_file = os.path.join(out_dir, f"art_{idx}.jpg")
-            v_prompt = s.get("visual", "cinematic art, no text")
-            ok = await self.llm.generate_image(v_prompt, art_file)
-            arts.append(art_file if ok else None)
-
-        frames = []
-        texts = []
-        for i, s in enumerate(scenes):
-            f_path = os.path.join(out_dir, f"frame_{i}.jpg")
-            render_reel_frame(None, s.get("text", ""), f_path, i, [], None, arts[i] if i < len(arts) else None, slug)
-            frames.append(f_path)
-            texts.append(s.get("text", ""))
-
-        video_path = os.path.join(out_dir, "reel_final.mp4")
-        audios = [None] * len(scenes)
-        await asyncio.to_thread(build_reel, frames, audios, texts, video_path)
-
-        await wait.delete()
-        with open(video_path, "rb") as vf:
-            await target.reply_video(
-                video=vf,
-                caption=reel_data.get("caption", "✅ ریلز ۵ سکانسی آماده شد."),
-                reply_markup=self._result_actions_menu(slug, "reel", topic[:30]),
-            )
+            await wait.delete()
+            with open(video_path, "rb") as vf:
+                await bot.send_video(
+                    chat_id=chat_id,
+                    video=vf,
+                    caption=reel_data.get("caption", "✅ ریلز ۵ سکانسی آماده شد."),
+                    reply_markup=self._result_actions_menu(slug, "reel", topic[:30]),
+                )
+        except Exception as e:
+            log.error("Error executing reel task: %s", e)
+            await wait.edit_text(f"⚠️ خطایی در تدوین ریلز رخ داد: {e}")
 
     async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         q = update.callback_query
         await q.answer()
         data = q.data or ""
+        chat_id = q.message.chat_id
 
         if data == "menu:main":
             await q.edit_message_text("🏢 **منوی اصلی دستیار ویرا**", reply_markup=self._main_menu(), parse_mode="Markdown")
@@ -300,7 +312,7 @@ class ViraTelegramBot:
                     parse_mode="Markdown",
                 )
 
-        # منوی ۳ گزینه‌ای کاروسل و ریلز
+        # منوی انتخاب موضوع کاروسل و ریلز
         elif data.startswith("car_menu:"):
             slug = data.split(":")[1]
             page = self.db.get_page_by_slug(slug)
@@ -321,14 +333,12 @@ class ViraTelegramBot:
         # موضوعات ترند خودکار
         elif data.startswith("gen_auto:"):
             _, slug, kind = data.split(":")
-            agent = self.ceo.get_department_agent(slug)
+            agent = self._get_agent(slug)
             trend_topic = agent.get_random_trend()
             if kind == "carousel":
-                await q.edit_message_text(f"🌟 موضوع ترند انتخاب شد: «{trend_topic}»\nدر حال شروع ساخت کاروسل...")
-                await self._produce_and_send_carousel(q, slug, trend_topic, 4)
+                asyncio.create_task(self._execute_carousel_task(context.bot, chat_id, slug, trend_topic, 4))
             else:
-                await q.edit_message_text(f"🌟 موضوع ترند انتخاب شد: «{trend_topic}»\nدر حال شروع تدوین ریلز...")
-                await self._produce_and_send_reel(q, slug, trend_topic)
+                asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, trend_topic))
 
         # انتخاب موضوع دستی توسط کاربر
         elif data.startswith("gen_manual:"):
@@ -337,24 +347,24 @@ class ViraTelegramBot:
             label = "کاروسل تصویری" if kind == "carousel" else "ریلز ۵ سکانسی"
             await q.edit_message_text(f"✍️ لطفاً موضوع دلخواهت را برای ساخت «{label}» تایپ کن و بفرست:")
 
-        # ساخت استوری
+        # ساخت استوری با کلیک روی دسته‌ها
         elif data.startswith("st_cat:"):
             _, cat_key, slug = data.split(":")
-            await self._produce_and_send_story(q, slug, cat_key)
+            asyncio.create_task(self._execute_story_task(context.bot, chat_id, slug, cat_key))
 
         # دکمه ساخت مجدد (یکی دیگه بساز)
         elif data.startswith("regen:"):
             _, slug, kind, param = data.split(":", 3)
             if kind == "story":
-                await self._produce_and_send_story(q, slug, param)
+                asyncio.create_task(self._execute_story_task(context.bot, chat_id, slug, param))
             elif kind == "carousel":
-                agent = self.ceo.get_department_agent(slug)
+                agent = self._get_agent(slug)
                 topic = param if len(param) > 4 else agent.get_random_trend()
-                await self._produce_and_send_carousel(q, slug, topic, 4)
+                asyncio.create_task(self._execute_carousel_task(context.bot, chat_id, slug, topic, 4))
             elif kind == "reel":
-                agent = self.ceo.get_department_agent(slug)
+                agent = self._get_agent(slug)
                 topic = param if len(param) > 4 else agent.get_random_trend()
-                await self._produce_and_send_reel(q, slug, topic)
+                asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, topic))
 
         elif data == "dept:trading:market_pulse":
             await q.edit_message_text("⏳ در حال دریافت تحلیل زنده بازار...")
@@ -379,6 +389,7 @@ class ViraTelegramBot:
 
     async def on_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
+        chat_id = msg.chat_id
         user_text = (msg.text or "").strip()
         active_task = context.user_data.get("vira_task")
 
@@ -388,10 +399,10 @@ class ViraTelegramBot:
             kind = active_task.get("kind", "carousel")
 
             if kind == "carousel":
-                await self._produce_and_send_carousel(msg, slug, user_text, 4)
+                asyncio.create_task(self._execute_carousel_task(context.bot, chat_id, slug, user_text, 4))
                 return
             elif kind == "reel":
-                await self._produce_and_send_reel(msg, slug, user_text)
+                asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, user_text))
                 return
             else:
                 page = self.db.get_page_by_slug(slug)
@@ -411,9 +422,8 @@ class ViraTelegramBot:
         await msg.reply_text(reply, reply_markup=self._main_menu())
 
     async def _error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
-        """مدیریت هوشمند خطاهای تلگرام بدون متوقف شدن ربات"""
         if isinstance(context.error, Conflict):
-            log.warning("Instance conflict detected during rollout. Waiting for previous instance to exit...")
+            log.warning("Conflict detected during rollout.")
             await asyncio.sleep(4)
         elif isinstance(context.error, NetworkError):
             log.warning("Network blip: %s", context.error)
@@ -431,7 +441,7 @@ class ViraTelegramBot:
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text_message))
         app.add_error_handler(self._error_handler)
 
-        log.info("Vira AI Agency Bot started successfully!")
+        log.info("Vira AI Agency Bot running smoothly!")
         app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 
