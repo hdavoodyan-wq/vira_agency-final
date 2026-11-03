@@ -159,25 +159,26 @@ class ViraTelegramBot:
             [InlineKeyboardButton("🔙 بازگشت", callback_data=f"page_hub:{slug}")],
         ])
 
-    def _carousel_slide_count_menu(self, slug: str, topic: str) -> InlineKeyboardMarkup:
-        # کدگذاری موضوع برای ارسال از طریق CallbackQuery
-        safe_topic = topic[:25]
+    def _carousel_slide_count_menu(self, slug: str) -> InlineKeyboardMarkup:
+        """منوی انتخاب اسلاید کاملاً سبک برای جلوگیری قطعی از ارور Button_data_invalid"""
         return InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("۳ اسلاید 📑", callback_data=f"car_run:{slug}:3:{safe_topic}"),
-                InlineKeyboardButton("۵ اسلاید 📑", callback_data=f"car_run:{slug}:5:{safe_topic}"),
+                InlineKeyboardButton("۳ اسلاید 📑", callback_data=f"car_run:{slug}:3"),
+                InlineKeyboardButton("۵ اسلاید 📑", callback_data=f"car_run:{slug}:5"),
             ],
             [
-                InlineKeyboardButton("۷ اسلاید 📑", callback_data=f"car_run:{slug}:7:{safe_topic}"),
-                InlineKeyboardButton("۱۰ اسلاید (کامل) 📑", callback_data=f"car_run:{slug}:10:{safe_topic}"),
+                InlineKeyboardButton("۷ اسلاید 📑", callback_data=f"car_run:{slug}:7"),
+                InlineKeyboardButton("۱۰ اسلاید (کامل) 📑", callback_data=f"car_run:{slug}:10"),
             ],
-            [InlineKeyboardButton("🔙 بازگشت به منوی کاروسل", callback_data=f"car_menu:{slug}")],
+            [InlineKeyboardButton("🔙 بازگشت به منوی پیج", callback_data=f"page_hub:{slug}")],
         ])
 
     def _result_actions_menu(self, slug: str, kind: str, param: str) -> InlineKeyboardMarkup:
+        # کوتاه کردن پارامتر جهت رعایت سقف ۶۴ بایتی دکمه تلگرام
+        short_param = (param or "")[:15]
         return InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("🔄 ساخت مجدد (یکی دیگه بساز)", callback_data=f"regen:{slug}:{kind}:{param}"),
+                InlineKeyboardButton("🔄 ساخت مجدد (یکی دیگه بساز)", callback_data=f"regen:{slug}:{kind}:{short_param}"),
                 InlineKeyboardButton("🔙 بازگشت به منوی پیج", callback_data=f"nav_page:{slug}"),
             ]
         ])
@@ -410,9 +411,10 @@ class ViraTelegramBot:
             agent = self._get_agent(slug)
             trend_topic = agent.get_random_trend()
             if kind == "carousel":
+                context.user_data["car_topic"] = trend_topic
                 await _safe_show_menu(
                     f"🌟 موضوع ترند انتخاب شد:\n**«{trend_topic}»**\n\n📌 کاروسل چند صفحه‌ای نیاز داری؟",
-                    self._carousel_slide_count_menu(slug, trend_topic),
+                    self._carousel_slide_count_menu(slug),
                 )
             else:
                 asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, trend_topic))
@@ -424,8 +426,13 @@ class ViraTelegramBot:
             await _safe_show_menu(f"✍️ لطفاً موضوع دلخواهت را برای ساخت «{label}» بنویس:", None)
 
         elif data.startswith("car_run:"):
-            _, slug, count_str, topic = data.split(":", 3)
-            slide_count = int(count_str)
+            parts = data.split(":")
+            slug = parts[1]
+            slide_count = int(parts[2])
+            topic = context.user_data.get("car_topic")
+            if not topic:
+                agent = self._get_agent(slug)
+                topic = agent.get_random_trend()
             asyncio.create_task(self._execute_carousel_task(context.bot, chat_id, slug, topic, slide_count))
 
         elif data.startswith("st_cat:"):
@@ -433,15 +440,19 @@ class ViraTelegramBot:
             asyncio.create_task(self._execute_story_task(context.bot, chat_id, slug, cat_key))
 
         elif data.startswith("regen:"):
-            _, slug, kind, param = data.split(":", 3)
+            parts = data.split(":")
+            slug = parts[1]
+            kind = parts[2]
+            param = parts[3] if len(parts) > 3 else ""
             if kind == "story":
                 asyncio.create_task(self._execute_story_task(context.bot, chat_id, slug, param))
             elif kind == "carousel":
                 agent = self._get_agent(slug)
-                topic = param if len(param) > 4 else agent.get_random_trend()
+                topic = context.user_data.get("car_topic") or agent.get_random_trend()
+                context.user_data["car_topic"] = topic
                 await _safe_show_menu(
                     f"🔄 ساخت مجدد کاروسل:\n**«{topic}»**\n\n📌 کاروسل چند صفحه‌ای نیاز داری؟",
-                    self._carousel_slide_count_menu(slug, topic),
+                    self._carousel_slide_count_menu(slug),
                 )
             elif kind == "reel":
                 agent = self._get_agent(slug)
@@ -481,10 +492,10 @@ class ViraTelegramBot:
             kind = active_task.get("kind", "carousel")
 
             if kind == "carousel":
-                # دریافت موضوع دستی و درخواست تعداد اسلاید از کاربر
+                context.user_data["car_topic"] = user_text
                 await msg.reply_text(
                     f"✍️ موضوع شما دریافت شد:\n**«{user_text}»**\n\n📌 کاروسل چند صفحه‌ای نیاز داری؟",
-                    reply_markup=self._carousel_slide_count_menu(slug, user_text),
+                    reply_markup=self._carousel_slide_count_menu(slug),
                     parse_mode="Markdown"
                 )
                 return
