@@ -159,6 +159,21 @@ class ViraTelegramBot:
             [InlineKeyboardButton("🔙 بازگشت", callback_data=f"page_hub:{slug}")],
         ])
 
+    def _carousel_slide_count_menu(self, slug: str, topic: str) -> InlineKeyboardMarkup:
+        # کدگذاری موضوع برای ارسال از طریق CallbackQuery
+        safe_topic = topic[:25]
+        return InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("۳ اسلاید 📑", callback_data=f"car_run:{slug}:3:{safe_topic}"),
+                InlineKeyboardButton("۵ اسلاید 📑", callback_data=f"car_run:{slug}:5:{safe_topic}"),
+            ],
+            [
+                InlineKeyboardButton("۷ اسلاید 📑", callback_data=f"car_run:{slug}:7:{safe_topic}"),
+                InlineKeyboardButton("۱۰ اسلاید (کامل) 📑", callback_data=f"car_run:{slug}:10:{safe_topic}"),
+            ],
+            [InlineKeyboardButton("🔙 بازگشت به منوی کاروسل", callback_data=f"car_menu:{slug}")],
+        ])
+
     def _result_actions_menu(self, slug: str, kind: str, param: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup([
             [
@@ -260,7 +275,7 @@ class ViraTelegramBot:
             log.error("Error executing story task: %s", e)
             await wait_msg.edit_text(f"⚠️ خطایی رخ داد: {e}")
 
-    async def _execute_carousel_task(self, bot, chat_id, slug: str, topic: str, count: int = 4):
+    async def _execute_carousel_task(self, bot, chat_id, slug: str, topic: str, count: int = 8):
         page = self.db.get_page_by_slug(slug)
         agent = self._get_agent(slug)
 
@@ -344,56 +359,50 @@ class ViraTelegramBot:
         data = q.data or ""
         chat_id = q.message.chat_id
 
+        async def _safe_show_menu(text: str, reply_markup: InlineKeyboardMarkup):
+            try:
+                await q.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+            except Exception:
+                await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+
         if data == "menu:main":
-            await q.edit_message_text("🏢 **منوی اصلی دستیار ویرا**", reply_markup=self._main_menu(), parse_mode="Markdown")
+            await _safe_show_menu("🏢 **منوی اصلی دستیار ویرا**", self._main_menu())
 
         elif data == "menu:select_page":
-            await q.edit_message_text("🎯 برای کدام پیج می‌خواهی محتوا بسازی؟", reply_markup=self._page_selection_menu())
+            await _safe_show_menu("🎯 برای کدام پیج می‌خواهی محتوا بسازی؟", self._page_selection_menu())
 
         elif data.startswith("page_hub:") or data.startswith("nav_page:"):
             slug = data.split(":")[1]
             page = self.db.get_page_by_slug(slug)
             if page:
-                try:
-                    await q.edit_message_text(
-                        f"✨ **پیج: {page['title']}**\nچه نوع محتوایی می‌خواهی تولید کنی؟",
-                        reply_markup=self._department_menu(page),
-                        parse_mode="Markdown",
-                    )
-                except Exception:
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=f"✨ **پیج: {page['title']}**\nچه نوع محتوایی می‌خواهی تولید کنی؟",
-                        reply_markup=self._department_menu(page),
-                        parse_mode="Markdown",
-                    )
+                await _safe_show_menu(
+                    f"✨ **پیج: {page['title']}**\nچه نوع محتوایی می‌خواهی تولید کنی؟",
+                    self._department_menu(page),
+                )
 
         elif data.startswith("act:") and data.endswith(":story"):
             slug = data.split(":")[1]
             page = self.db.get_page_by_slug(slug)
             if page:
-                await q.edit_message_text(
+                await _safe_show_menu(
                     f"📲 **انتخاب سبک استوری برای «{page['title']}»:**",
-                    reply_markup=self._story_cats_menu(page),
-                    parse_mode="Markdown",
+                    self._story_cats_menu(page),
                 )
 
         elif data.startswith("car_menu:"):
             slug = data.split(":")[1]
             page = self.db.get_page_by_slug(slug)
-            await q.edit_message_text(
+            await _safe_show_menu(
                 f"🖼️ **ساخت کاروسل اسلایدی برای «{page['title']}»**\nلطفاً نحوه انتخاب موضوع را مشخص کن:",
-                reply_markup=self._topic_selection_menu(slug, "carousel"),
-                parse_mode="Markdown",
+                self._topic_selection_menu(slug, "carousel"),
             )
 
         elif data.startswith("reel_menu:"):
             slug = data.split(":")[1]
             page = self.db.get_page_by_slug(slug)
-            await q.edit_message_text(
+            await _safe_show_menu(
                 f"🎬 **ساخت ریلز ۵ سکانسی برای «{page['title']}»**\nلطفاً نحوه انتخاب موضوع را مشخص کن:",
-                reply_markup=self._topic_selection_menu(slug, "reel"),
-                parse_mode="Markdown",
+                self._topic_selection_menu(slug, "reel"),
             )
 
         elif data.startswith("gen_auto:"):
@@ -401,7 +410,10 @@ class ViraTelegramBot:
             agent = self._get_agent(slug)
             trend_topic = agent.get_random_trend()
             if kind == "carousel":
-                asyncio.create_task(self._execute_carousel_task(context.bot, chat_id, slug, trend_topic, 4))
+                await _safe_show_menu(
+                    f"🌟 موضوع ترند انتخاب شد:\n**«{trend_topic}»**\n\n📌 کاروسل چند صفحه‌ای نیاز داری؟",
+                    self._carousel_slide_count_menu(slug, trend_topic),
+                )
             else:
                 asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, trend_topic))
 
@@ -409,7 +421,12 @@ class ViraTelegramBot:
             _, slug, kind = data.split(":")
             context.user_data["vira_task"] = {"slug": slug, "kind": kind}
             label = "کاروسل تصویری" if kind == "carousel" else "ریلز ۵ سکانسی"
-            await q.edit_message_text(f"✍️ لطفاً موضوع دلخواهت را برای ساخت «{label}» بنویس:")
+            await _safe_show_menu(f"✍️ لطفاً موضوع دلخواهت را برای ساخت «{label}» بنویس:", None)
+
+        elif data.startswith("car_run:"):
+            _, slug, count_str, topic = data.split(":", 3)
+            slide_count = int(count_str)
+            asyncio.create_task(self._execute_carousel_task(context.bot, chat_id, slug, topic, slide_count))
 
         elif data.startswith("st_cat:"):
             _, cat_key, slug = data.split(":")
@@ -422,7 +439,10 @@ class ViraTelegramBot:
             elif kind == "carousel":
                 agent = self._get_agent(slug)
                 topic = param if len(param) > 4 else agent.get_random_trend()
-                asyncio.create_task(self._execute_carousel_task(context.bot, chat_id, slug, topic, 4))
+                await _safe_show_menu(
+                    f"🔄 ساخت مجدد کاروسل:\n**«{topic}»**\n\n📌 کاروسل چند صفحه‌ای نیاز داری؟",
+                    self._carousel_slide_count_menu(slug, topic),
+                )
             elif kind == "reel":
                 agent = self._get_agent(slug)
                 topic = param if len(param) > 4 else agent.get_random_trend()
@@ -461,7 +481,12 @@ class ViraTelegramBot:
             kind = active_task.get("kind", "carousel")
 
             if kind == "carousel":
-                asyncio.create_task(self._execute_carousel_task(context.bot, chat_id, slug, user_text, 4))
+                # دریافت موضوع دستی و درخواست تعداد اسلاید از کاربر
+                await msg.reply_text(
+                    f"✍️ موضوع شما دریافت شد:\n**«{user_text}»**\n\n📌 کاروسل چند صفحه‌ای نیاز داری؟",
+                    reply_markup=self._carousel_slide_count_menu(slug, user_text),
+                    parse_mode="Markdown"
+                )
                 return
             elif kind == "reel":
                 asyncio.create_task(self._execute_reel_task(context.bot, chat_id, slug, user_text))
