@@ -80,6 +80,22 @@ class ViraTelegramBot:
         self.llm = LLMRouter(self.cfg, self.db)
         self.ceo = ViraOrchestrator(self.cfg, self.db, self.llm)
 
+    async def _post_init_hook(self, application: Application):
+        """ارسال خودکار پیام به ادمین هنگام روشن شدن یا به‌روزرسانی سرور"""
+        owner_id = self.cfg.owner_id
+        if owner_id and owner_id > 0:
+            try:
+                await application.bot.send_message(
+                    chat_id=owner_id,
+                    text="🚀 **دستیار ویرا با موفقیت به‌روزرسانی / روشن شد!**\n\n"
+                         "✅ سرور آنلاین است و آماده دریافت دستورات.\n"
+                         "🔗 وضعیت سیستم: پایدار و فعال.",
+                    parse_mode="Markdown",
+                )
+                log.info("Startup notification sent to owner %d", owner_id)
+            except Exception as e:
+                log.warning("Could not send startup notification: %s", e)
+
     def _main_menu(self) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("🎨 تولید محتوا (انتخاب پیج)", callback_data="menu:select_page")],
@@ -394,7 +410,7 @@ class ViraTelegramBot:
         t_web = threading.Thread(target=run_web_server, daemon=True)
         t_web.start()
 
-        app = Application.builder().token(self.cfg.telegram_token).build()
+        app = Application.builder().token(self.cfg.telegram_token).post_init(self._post_init_hook).build()
         app.add_handler(CommandHandler("start", self.cmd_start))
         app.add_handler(CallbackQueryHandler(self.on_callback))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.on_text_message))
