@@ -1,14 +1,15 @@
 """
 ایجنت‌های ۳ دپارتمان تخصصی آژانس هوشمند دستیار ویرا
-نسخه کامل، بدون خلاصه‌سازی و دارای سناریوهای جامع:
-۱. دپارتمان ترید: کوییز چارت تریدینگ‌ویو (جفت استوری ۱ و ۲)، اخبار زنده، تحلیل بیت‌کوین و روانشناسی طمع
-۲. دپارتمان روانشناسی تاریک (ذهن زیبا): با حضور کامل کاراکترهای دراکولا، گرگ تنها، روباه مکار، شوالیه، اسکلت و بانوی مرموز
-۳. دپارتمان گالری هنری الهه: آینه‌های وابی‌سابی، ظروف دکوراتیو و مجسمه‌های مدرن
+نسخه ۱۰۰٪ کامل، بدون هیچ‌گونه خلاصه‌سازی و با تمامی متدها:
+۱. دپارتمان ترید: کوییز چارت تریدینگ‌ویو (استوری ۱ و ۲)، اخبار زنده، تحلیل بیت‌کوین و روانشناسی طمع
+۲. دپارتمان روانشناسی تاریک (ذهن زیبا): حضور کامل کاراکترهای دراکولا، گرگ تنها، روباه مکار، شوالیه، اسکلت و بانوی مرموز
+۳. دپارتمان گالری هنری الهه: آینه‌های وابی‌سابی، ظروف دکوراتیو، مجسمه‌ها و فرمول‌های کارگاه
 
 پشتیبانی کامل از:
 - متدهای make_story (شامل استوری‌های تکی و استوری جفتی کوییز)
-- متدهای make_carousel با سناریوهای روایی چند اسلایدی در ابعاد ۱۰۸۰×۱۳۵۰
+- متدهای make_carousel با سناریوهای روایی تا ۱۰ اسلاید پیوسته
 - متدهای make_reel با سناریوهای ۵ سکانسی
+- متد get_random_trend برای دریافت موضوعات ترند روزانه
 - فیلتر قطعی ضد نشت انگلیسی (Zero English Leak)
 """
 import random
@@ -47,6 +48,8 @@ class TradingAgent:
         "انتقام از بازار: چطور یک ضرر کوچک کل اکانت را نابود می‌کند؟",
         "تشخیص واگرایی منفی و بریک‌اوت جعلی در مقاومت کلیدی",
         "چگونه بعد از یک روز منفی، احساسات خود را مدیریت کنیم؟",
+        "تله فومو (FOMO) در کندل‌های شارپ صعودی",
+        "ترس از دست دادن فرصت در برابر انضباط معاملاتی",
     ]
 
     QUIZ_SCENARIOS = [
@@ -146,7 +149,6 @@ class TradingAgent:
         }
         res = fallbacks.get(cat_key, fallbacks["t_psyc"])
 
-        # پرامپت فارسی بدون نشت
         prompt = (
             f"برای پیج روانشناسی معامله‌گری یک استوری تخصصی در سبک «{cat_key}» بنویس.\n"
             "فقط به فارسی بنویس و عبارات مهم را بین **کلمه** بگذار.\n"
@@ -164,11 +166,12 @@ class TradingAgent:
         return res
 
     async def make_carousel(self, topic: str, count: int = 4) -> Dict[str, Any]:
-        """کاروسل ادیتوریال و روایی روانشناسی ترید بر اساس ساختار طلایی"""
+        """کاروسل ادیتوریال و روایی روانشناسی ترید بر اساس ساختار طلایی تا ۱۰ اسلاید"""
+        clean_topic = topic.replace("«", "").replace("»", "").replace("موضوع", "").strip()
         full_slides = [
             {
-                "heading": "قلاب: خطای نامرئی ذهن",
-                "body": f"شاید مشکل اصلی تو استراتژی معاملاتی‌ات نیست؛ مغزت در موضوع **«{topic}»** علیه سرمایه‌ات معامله می‌کند.",
+                "heading": "خطای نامرئی ذهن",
+                "body": f"شاید مشکل اصلی تو استراتژی معاملاتی‌ات نیست؛ مغزت در {clean_topic} دقیقاً خلاف منافع مالی تو معامله می‌کند.",
                 "visual": "Cinematic exhausted trader sitting in dark modern office in front of glowing charts, deep royal purple and red neon, moody chiaroscuro lighting, no text"
             },
             {
@@ -187,17 +190,17 @@ class TradingAgent:
                 "visual": "Conceptual hourglass with gold coins slipping into dark void, illuminated by royal purple rim light, cinematic 8k, no text"
             },
             {
-                "heading": "نشانه‌های خطر",
-                "body": "چک کردن مداوم PnL در ثانیه، تغییر حد ضرر و جابجا کردن خطوط چارت، **هشدار تسلط هیجان** بر منطق است.",
+                "heading": "نشانه‌های خطر در پوزیشن",
+                "body": "چک کردن مداوم سود و زیان در ثانیه، جابجا کردن حد ضرر و تغییر خطوط چارت، **هشدار تسلط ترس** بر منطق است.",
                 "visual": "Macro close-up of a trader hand trembling over a glowing neon buy button, moody dark ambience, no text"
             },
             {
                 "heading": "راهکار طلایی: قانون ۳ دقیقه",
-                "body": "قبل از هر کلیک، ۳ دقیقه از سیستم فاصله بگیر، حد ضرر را در سیستم ثبت کن و **دست از مانیتور بردار**.",
+                "body": "قبل از هر کلیک، ۳ دقیقه از سیستم فاصله بگیر، حد ضرر را در صرافی ثبت کن و **دست از مانیتور بردار**.",
                 "visual": "High-tech futuristic trading terminal with locked emerald green padlock, professional cybernetic aesthetic, clean composition, no text"
             },
             {
-                "heading": "تثبیت انضباط",
+                "heading": "تثبیت انضباط فولادی",
                 "body": "حرفه‌ای‌ها به نتیجه یک ترید نگاه نمی‌کنند؛ آن‌ها به **برآیند ۲۰ معامله بعدی** بر اساس قوانین متعهد می‌مانند.",
                 "visual": "Calm disciplined investor meditating in front of tranquil neon charts, atmospheric balance, no text"
             },
@@ -207,7 +210,7 @@ class TradingAgent:
                 "visual": "Futuristic financial vault opening with steady glowing light, royal purple aesthetic, no text"
             },
             {
-                "heading": "چک‌لیست قبل ورود",
+                "heading": "چک‌لیست قبل از ورود",
                 "body": "۱. تاییدیه ستاپ ۲. نسبت ریسک به ریوارد بالای ۲ ۳. حجم متناسب با سرمایه. **اگر یکی نبود، معامله لغو است.**",
                 "visual": "Glowing cyan digital holographic clipboard floating in dark trading hub, clean minimalism, no text"
             },
@@ -220,7 +223,7 @@ class TradingAgent:
         chosen_slides = full_slides[:max(1, min(count, len(full_slides)))]
         return {
             "slides": chosen_slides,
-            "caption": f"📈 کاروسل تخصصی روانشناسی معامله‌گری ({len(chosen_slides)} اسلاید): {topic}\n\nآیدی اختصاصی: @tradebazehn\n#روانشناسی_معامله_گری #ترید #مدیریت_ریسک #بیت_کوین"
+            "caption": f"📈 کاروسل تخصصی روانشناسی معامله‌گری ({len(chosen_slides)} اسلاید): {clean_topic}\n\nآیدی اختصاصی: @tradebazehn\n#روانشناسی_معامله_گری #ترید #مدیریت_ریسک #بیت_کوین"
         }
 
     async def make_reel(self, topic: str) -> Dict[str, Any]:
@@ -244,6 +247,7 @@ class DarkPsychAgent:
         "استقلال عاطفی گرگ تنها در برابر باج‌گیری و کنترل‌گری احساسی",
         "دوراهی شوالیه تاریک: بخشش بزرگوارانه یا حذف سرد و بی‌سر‌و‌صدا؟",
         "راز کاریزمای دست‌نیافتنی؛ چرا افراد پیش‌بینی‌ناپذیر جذاب‌ترند؟",
+        "هیپنوتیزم کلامی و کنترل پنهان در مکالمات حساس",
     ]
 
     CHARACTERS = {
@@ -316,11 +320,12 @@ class DarkPsychAgent:
         return res
 
     async def make_carousel(self, topic: str, count: int = 4) -> Dict[str, Any]:
-        """کاروسل ادیتوریال و سینمایی با ابعاد ۱۰۸۰×۱۳۵۰ و کاراکترهای گوتیک"""
+        """کاروسل ادیتوریال و سینمایی با ابعاد ۱۰۸۰×۱۳۵۰ و کاراکترهای گوتیک تا ۱۰ اسلاید"""
+        clean_topic = topic.replace("«", "").replace("»", "").replace("موضوع", "").strip()
         full_slides = [
             {
                 "heading": "قوانین ذهن زیبا: قلاب قدرت",
-                "body": f"در جهان روابط انسانی و موضوع **«{topic}»**، آنکه کمتر حرف می‌زند و بیشتر مشاهده می‌کند بازی را کنترل می‌کند.",
+                "body": f"در جهان روابط انسانی و {clean_topic}، آنکه کمتر حرف می‌زند و بیشتر مشاهده می‌کند همیشه کنترل بازی را در دست دارد.",
                 "visual": self.CHARACTERS["knight"]
             },
             {
@@ -372,7 +377,7 @@ class DarkPsychAgent:
         chosen_slides = full_slides[:max(1, min(count, len(full_slides)))]
         return {
             "slides": chosen_slides,
-            "caption": f"🖤 رازهای عمیق کنترل ذهن و کاریزما در «{topic}» ({len(chosen_slides)} اسلاید).\n\nپیج رسمی: @zehnayetaarik\n#ذهن_زیبا #روانشناسی_تاریک #کاریزما #نفوذ_روانی"
+            "caption": f"🖤 رازهای عمیق کنترل ذهن و کاریزما در «{clean_topic}» ({len(chosen_slides)} اسلاید).\n\nپیج رسمی: @zehnayetaarik\n#ذهن_زیبا #روانشناسی_تاریک #کاریزما #نفوذ_روانی"
         }
 
     async def make_reel(self, topic: str) -> Dict[str, Any]:
@@ -395,6 +400,7 @@ class ArtAgent:
         "مجسمه‌های فرم آزاد مینیمال؛ خلق حس آرامش در سکوت فضا",
         "فرمول طلایی چسب چوب و تکنیک جلوگیری از ترک در پاپیه‌ماشه",
         "چرا اکسسوری‌های دست‌ساز ارزش دکوراسیون خانه را دوچندان می‌کنند؟",
+        "ساعت‌های دیواری دست‌ساز با بافت شنی و خاکی",
     ]
 
     def __init__(self, llm):
@@ -436,10 +442,11 @@ class ArtAgent:
         return fallbacks.get(cat_key, fallbacks["art_mirror"])
 
     async def make_carousel(self, topic: str, count: int = 4) -> Dict[str, Any]:
+        clean_topic = topic.replace("«", "").replace("»", "").replace("موضوع", "").strip()
         full_slides = [
             {
-                "heading": f"کالکشن گالری الهه: {topic}",
-                "body": "ترکیب بافت‌های دست‌ساز و ارگانیک با چیدمان خانه مدرن، **حس گرما و اصالت ماندگار** به فضا می‌بخشد.",
+                "heading": f"کالکشن گالری الهه",
+                "body": f"حضور {clean_topic} در چیدمان خانه مدرن، **حس گرما و اصالت ماندگار** به فضا می‌بخشد.",
                 "visual": "Minimalist luxury living room with handmade paper mache decor in warm neutral tones, natural light, no text"
             },
             {
