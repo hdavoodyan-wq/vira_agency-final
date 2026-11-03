@@ -1,29 +1,31 @@
 """
 vira_agency/core/cloudflare.py
-موتور اختصاصی و پایدار تولید تصویر با Cloudflare Workers AI (@cf/black-forest-labs/flux-1-schnell)
-دارای لاگ شفاف، مدیریت خطای توکن و اعتبارسنجی خروجی بایت‌ها
+موتور تولید تصویر Cloudflare Workers AI با پشتیبانی کامل از Base64 JSON و Binary
 """
 import os
+import base64
 import aiohttp
 import logging
 from typing import Optional
 
 logger = logging.getLogger("vira_agency.cloudflare")
 
-CF_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
-CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 MODEL_NAME = "@cf/black-forest-labs/flux-1-schnell"
 
 async def generate_image(prompt: str, width: int = 1080, height: int = 1350) -> Optional[bytes]:
-    """
-    تولید تصویر با کیفیت بالا از Cloudflare Workers AI
-    خروجی: بایت‌های تصویر JPEG/PNG برای چسباندن روی بوم رندر
-    """
-    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", CF_ACCOUNT_ID).strip()
-    api_token = os.getenv("CLOUDFLARE_API_TOKEN", CF_API_TOKEN).strip()
+    account_id = (
+        os.getenv("CLOUDFLARE_ACCOUNT_ID")
+        or os.getenv("CF_ACCOUNT_ID")
+        or ""
+    ).strip()
+    api_token = (
+        os.getenv("CLOUDFLARE_API_TOKEN")
+        or os.getenv("CF_API_TOKEN")
+        or ""
+    ).strip()
 
     if not account_id or not api_token:
-        logger.error("❌ خطای احراز هویت: CLOUDFLARE_ACCOUNT_ID یا CLOUDFLARE_API_TOKEN در متغیرهای محیطی ست نشده است!")
+        logger.error("❌ CLOUDFLARE_ACCOUNT_ID یا CLOUDFLARE_API_TOKEN در متغیرهای محیطی یافت نشد!")
         return None
 
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{MODEL_NAME}"
@@ -32,32 +34,48 @@ async def generate_image(prompt: str, width: int = 1080, height: int = 1350) -> 
         "Content-Type": "application/json"
     }
 
-    # بهینه‌سازی پرامپت جهت حذف هرگونه متن انگلیسی و افزایش کیفیت بصری
-    clean_prompt = f"{prompt}, high resolution, ultra realistic, masterpiece, cinematic lighting, 8k, sharp focus, absolutely no text, no letters, no words, no watermark"
-    
+    clean_prompt = (
+        f"{prompt}, masterpiece, cinematic lighting, ultra detailed, 8k resolution, "
+        "sharp focus, photorealistic, no text, no letters, no watermark, no signature"
+    )
     payload = {
         "prompt": clean_prompt,
         "steps": 4
     }
 
-    logger.info(f"🎨 در حال ارسال درخواست به کلودفلر برای سوژه: {prompt[:60]}...")
-
     try:
-        timeout = aiohttp.ClientTimeout(total=45)
+        timeout = aiohttp.ClientTimeout(total=50)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, headers=headers, json=payload) as response:
-                if response.status == 200:
-                    image_bytes = await response.read()
-                    if image_bytes and len(image_bytes) > 1000:
-                        logger.info(f"✅ تصویر کلودفلر با موفقیت دریافت شد (حجم: {len(image_bytes)} بایت).")
-                        return image_bytes
-                    else:
-                        logger.warning("⚠️ بایت‌های تصویر دریافتی از کلودفلر نامعتبر یا بسیار کم‌حجم است.")
-                        return None
+            async with session.post(url, headers=headers, json=payload) as resp:
+                if resp.status != 200:
+                    err = await resp.text()
+                    logger.error(f"❌ خطای کلودفلر ({resp.status}): {err}")
+                    return None
+
+                content_type = resp.headers.get("Content-Type", "")
+                if "application/json" in content_type:
+                    data = await resp.json()
+                    b64_img = data.get("result", {}).get("image")
+                    if b64_img:
+                        img_bytes = base64.b64decode(b64_img)
+                        logger.info(f"✅ تصویر Base64 از کلودفلر دریافت و دیکود شد ({len(img_bytes)} bytes).")
+                        return img_bytes
+                    logger.error(f"❌ کلید image در JSON کلودفلر نبود: {data}")
+                    return None
                 else:
-                    error_text = await response.text()
-                    logger.error(f"❌ خطای پاسخ از کلودفلر (کد {response.status}): {error_text}")
+                    raw_bytes = await resp.read()
+                    if raw_bytes and len(raw_bytes) > 500:
+                        try:
+                            import json
+                            parsed = json.loads(raw_bytes.decode("utf-8"))
+                            b64_img = parsed.get("result", {}).get("image")
+                            if b64_img:
+                                return base64.b64decode(b64_img)
+                        except Exception:
+                            pass
+                        logger.info(f"✅ تصویر باینری کلودفلر دریافت شد ({len(raw_bytes)} bytes).")
+                        return raw_bytes
                     return None
     except Exception as e:
-        logger.error(f"❌ خطا در برقراری ارتباط با سرویس کلودفلر: {e}")
+        logger.error(f"❌ استثنا در ارتباط با کلودفلر: {e}")
         return None
