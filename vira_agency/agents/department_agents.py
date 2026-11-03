@@ -165,7 +165,7 @@ class TradingAgent:
 
     async def make_carousel(self, topic: str, count: int = 4) -> Dict[str, Any]:
         """کاروسل ادیتوریال و روایی روانشناسی ترید بر اساس ساختار طلایی"""
-        slides = [
+        full_slides = [
             {
                 "heading": "قلاب: خطای نامرئی ذهن",
                 "body": f"شاید مشکل اصلی تو استراتژی معاملاتی‌ات نیست؛ مغزت در موضوع **«{topic}»** علیه سرمایه‌ات معامله می‌کند.",
@@ -177,19 +177,50 @@ class TradingAgent:
                 "visual": "Minimalist conceptual art, human brain intertwined with volatile glowing stock charts, dark purple void background, dramatic lighting, no text"
             },
             {
-                "heading": "مکانیزم روانی: سوگیری زیان‌گریزی",
-                "body": "درد باختن ۲ برابر لذت بردن از سود است. مغزت برای فرار از حس شکست، **به امید بازگشت قیمت** معامله ضررده را باز نگه می‌دارد.",
+                "heading": "تعلیق: ریشه خشم",
+                "body": "این رفتار از طمع نیست! ذهن تو تلاش می‌کند با **انتقام از چارت**، درد تحقیر شدن توسط بازار را التیام دهد.",
+                "visual": "Conceptual dark chess board with broken king piece glowing in deep violet neon, cinematic realism, no text"
+            },
+            {
+                "heading": "مکانیزم: زیان‌گریزی",
+                "body": "درد باختن ۲ برابر لذت سود است. مغزت برای فرار از پذیرش باخت، **معامله ضررده را تا لبه کال‌مارجین** باز نگه می‌دارد.",
                 "visual": "Conceptual hourglass with gold coins slipping into dark void, illuminated by royal purple rim light, cinematic 8k, no text"
             },
             {
+                "heading": "نشانه‌های خطر",
+                "body": "چک کردن مداوم PnL در ثانیه، تغییر حد ضرر و جابجا کردن خطوط چارت، **هشدار تسلط هیجان** بر منطق است.",
+                "visual": "Macro close-up of a trader hand trembling over a glowing neon buy button, moody dark ambience, no text"
+            },
+            {
                 "heading": "راهکار طلایی: قانون ۳ دقیقه",
-                "body": "قبل از هر کلیک، ۳ دقیقه از سیستم فاصله بگیر، حد ضرر را در سیستم ثبت کن و **دست از مانیتور بردار**. انضباط یعنی سود پایدار.",
+                "body": "قبل از هر کلیک، ۳ دقیقه از سیستم فاصله بگیر، حد ضرر را در سیستم ثبت کن و **دست از مانیتور بردار**.",
                 "visual": "High-tech futuristic trading terminal with locked emerald green padlock, professional cybernetic aesthetic, clean composition, no text"
+            },
+            {
+                "heading": "تثبیت انضباط",
+                "body": "حرفه‌ای‌ها به نتیجه یک ترید نگاه نمی‌کنند؛ آن‌ها به **برآیند ۲۰ معامله بعدی** بر اساس قوانین متعهد می‌مانند.",
+                "visual": "Calm disciplined investor meditating in front of tranquil neon charts, atmospheric balance, no text"
+            },
+            {
+                "heading": "پایان و نتیجه‌گیری",
+                "body": "آخرین باری که با حجم بالا وارد شدی، داشتی تحلیل می‌کردی یا **می‌خواستی باخت قبلی را پس بگیری؟** نظرت را بنویس.",
+                "visual": "Futuristic financial vault opening with steady glowing light, royal purple aesthetic, no text"
+            },
+            {
+                "heading": "چک‌لیست قبل ورود",
+                "body": "۱. تاییدیه ستاپ ۲. نسبت ریسک به ریوارد بالای ۲ ۳. حجم متناسب با سرمایه. **اگر یکی نبود، معامله لغو است.**",
+                "visual": "Glowing cyan digital holographic clipboard floating in dark trading hub, clean minimalism, no text"
+            },
+            {
+                "heading": "ذخیره برای مرور",
+                "body": "این پست را سیو کن تا هر بار قبل از باز کردن پوزیشن‌های پرریسک، **اصول انضباط فردی** را به خودت یادآوری کنی.",
+                "visual": "Glowing neon emerald bookmark icon hovering inside dark cybernetic matrix, 8k cinematic, no text"
             }
         ]
+        chosen_slides = full_slides[:max(1, min(count, len(full_slides)))]
         return {
-            "slides": slides[:count],
-            "caption": f"📈 کاروسل تخصصی روانشناسی معامله‌گری: {topic}\n\nآیدی اختصاصی: @tradebazehn\n#روانشناسی_معامله_گری #ترید #مدیریت_ریسک #بیت_کوین"
+            "slides": chosen_slides,
+            "caption": f"📈 کاروسل تخصصی روانشناسی معامله‌گری ({len(chosen_slides)} اسلاید): {topic}\n\nآیدی اختصاصی: @tradebazehn\n#روانشناسی_معامله_گری #ترید #مدیریت_ریسک #بیت_کوین"
         }
 
     async def make_reel(self, topic: str) -> Dict[str, Any]:
@@ -286,7 +317,7 @@ class DarkPsychAgent:
 
     async def make_carousel(self, topic: str, count: int = 4) -> Dict[str, Any]:
         """کاروسل ادیتوریال و سینمایی با ابعاد ۱۰۸۰×۱۳۵۰ و کاراکترهای گوتیک"""
-        slides = [
+        full_slides = [
             {
                 "heading": "قوانین ذهن زیبا: قلاب قدرت",
                 "body": f"در جهان روابط انسانی و موضوع **«{topic}»**، آنکه کمتر حرف می‌زند و بیشتر مشاهده می‌کند بازی را کنترل می‌کند.",
@@ -298,19 +329,50 @@ class DarkPsychAgent:
                 "visual": self.CHARACTERS["fox"]
             },
             {
+                "heading": "تعلیق: خطای نادیده گرفتن",
+                "body": "خطرناک‌ترین لحظه زمانی است که تصور می‌کنی همه چیز تحت کنترل توست، اما **قواعد بازی را از پیش برایت چیده‌اند.**",
+                "visual": "Gothic antique mirror cracked down the center reflecting shadowy figures, crimson rim lighting, no text"
+            },
+            {
                 "heading": "مرزهای گرگ: استقلال بی‌قید و شرط",
                 "body": "گرگ تنها گرسنگی را تحمل می‌کند اما قلاده را نمی‌پذیرد. وقتی **نیازمند تایید دیگران نباشی**، قوی‌ترین باج‌گیران روانی خلع سلاح می‌شوند.",
                 "visual": self.CHARACTERS["wolf"]
             },
             {
-                "heading": "پادزهر نهایی: سکوت سرد دراکولا",
-                "body": "در برابر افراد سمی نجنگ و توجیه نکن. **بی‌تفاوتی مطلق و خروج بی‌صدا** کشنده‌ترین واکنشی است که عزت‌نفس تو را جاودانه می‌کند.",
+                "heading": "افشای تکنیک ایزوله‌سازی",
+                "body": "افراد سمی آرام‌آرام دایره امن تو را از دوستان و خانواده دور می‌کنند تا **تنها پناهگاه تصمیم‌گیری‌ات خودشان باشند.**",
+                "visual": "A solitary dark figure standing surrounded by fading misty silhouettes in deep gothic woods, no text"
+            },
+            {
+                "heading": "سلاح پادزهر: سکوت سرد",
+                "body": "در برابر اتهام و تحریک‌های کلامی نجنگ. **سکوت آرام و تایید نکردن**، نقاب طرف مقابل را در چند ثانیه پایین می‌کشد.",
                 "visual": self.CHARACTERS["dracula"]
+            },
+            {
+                "heading": "حفظ قلمرو شخصی",
+                "body": "هر زمان احساس کردی برای جلب رضایت دیگری باید خودت را کوچک کنی، **همان لحظه عقب بنشین و مرزت را پررنگ کن.**",
+                "visual": self.CHARACTERS["lady"]
+            },
+            {
+                "heading": "پایان: خروج بی‌صدا",
+                "body": "قدرت واقعی در بحث کردن نیست؛ در **بی‌تفاوتی مطلق و ترک بازی** است. اجازه نده ذهن زیبایت دستمایه بازی‌های دیگران شود.",
+                "visual": self.CHARACTERS["skeleton"]
+            },
+            {
+                "heading": "اصل نفوذ ناپذیری",
+                "body": "کسی که از تنهایی نمی‌ترسد، هیچ‌گاه با تهدید به رفتن یا قهر تسلیم خواسته‌های غیرمنطقی دیگران نخواهد شد.",
+                "visual": self.CHARACTERS["knight"]
+            },
+            {
+                "heading": "ذخیره قوانین قدرت",
+                "body": "این کاروسل را ذخیره کن تا هر زمان مرزهایت مورد هجوم قرار گرفت، **قوانین محافظت از خود** را مرور کنی.",
+                "visual": "Ancient gothic book bound in black leather with silver glowing seal, dramatic crimson shadows, no text"
             }
         ]
+        chosen_slides = full_slides[:max(1, min(count, len(full_slides)))]
         return {
-            "slides": slides[:count],
-            "caption": f"🖤 رازهای عمیق کنترل ذهن و کاریزما در «{topic}».\n\nپیج رسمی: @zehnayetaarik\n#ذهن_زیبا #روانشناسی_تاریک #کاریزما #نفوذ_روانی"
+            "slides": chosen_slides,
+            "caption": f"🖤 رازهای عمیق کنترل ذهن و کاریزما در «{topic}» ({len(chosen_slides)} اسلاید).\n\nپیج رسمی: @zehnayetaarik\n#ذهن_زیبا #روانشناسی_تاریک #کاریزما #نفوذ_روانی"
         }
 
     async def make_reel(self, topic: str) -> Dict[str, Any]:
