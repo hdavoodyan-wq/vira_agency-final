@@ -1,6 +1,6 @@
 """
 ربات تلگرام آژانس هوشمند «دستیار ویرا»
-نسخه اصلاح‌شده: دکمه‌های بازگشت قطعی، اخبار ۱۰۰٪ فارسی و کوییز چارت‌محور دو مرحله‌ای (سوال + پاسخ)
+شامل ارسال تضمینی هر دو استوری کوییز (استوری ۱: سوال + جای استیکر Poll اینستاگرام / استوری ۲: پاسخ با خطوط تکنیکال)
 """
 import asyncio
 import logging
@@ -173,19 +173,21 @@ class ViraTelegramBot:
         try:
             story_res = await agent.make_story(cat_key)
 
-            # اگر استوری کوییز دو مرحله‌ای چارت بود (استوری اول: سوال / استوری دوم: پاسخ و دلیل)
+            # اگر استوری کوییز دو مرحله‌ای چارت بود (استوری ۱: سوال + جای استیکر پول / استوری ۲: پاسخ + خطوط تکنیکال)
             if isinstance(story_res, dict) and story_res.get("is_quiz_pair"):
                 out_dir = f"data/outputs/{page['id']}/quiz_{int(time.time())}"
                 os.makedirs(out_dir, exist_ok=True)
 
-                # ۱. استوری اول (سوال چارت)
+                # ۱. تولید و ارسال استوری اول (سوال چارت)
+                await wait_msg.edit_text("⏳ ۱/۲: در حال تصویرسازی چارت شفاف و رندر استوری سوال...")
                 q_data = story_res["question"]
                 q_art = os.path.join(out_dir, "q_art.jpg")
                 img_q_ok = await self.llm.generate_image(q_data["visual"], q_art)
                 q_out = os.path.join(out_dir, "quiz_q.jpg")
                 render_story(None, q_data, q_out, 0, [], None, cat_key, q_art if img_q_ok else None)
 
-                # ۲. استوری دوم (پاسخ چارت و علت تحلیل)
+                # ۲. تولید استوری دوم (پاسخ تحلیلی + خطوط و فلش تکنیکال)
+                await wait_msg.edit_text("⏳ ۲/۲: در حال رسم خطوط تکنیکال، شکست چارت و رندر استوری پاسخ...")
                 a_data = story_res["answer"]
                 a_art = os.path.join(out_dir, "a_art.jpg")
                 img_a_ok = await self.llm.generate_image(a_data["visual"], a_art)
@@ -194,18 +196,28 @@ class ViraTelegramBot:
 
                 await wait_msg.delete()
 
+                # ارسال استوری اول به همراه راهنمای قرار دادن استیکر نظرسنجی اینستاگرام
                 with open(q_out, "rb") as f_q:
                     await bot.send_photo(
                         chat_id=chat_id,
                         photo=f_q,
-                        caption=f"⚡ **استوری ۱ (سوال کوییز چارت):**\n\n{q_data['body']}".replace("*", ""),
+                        caption=(
+                            "⚡ **استوری ۱ (سوال کوییز چارت):**\n"
+                            "📍 *کادر خط‌چین روی عکس، محل قرار دادن استیکر نظرسنجی (Poll) در اینستاگرام است.*\n\n"
+                            f"{q_data['body']}".replace("*", "")
+                        ),
+                        parse_mode="Markdown",
                     )
 
+                # ارسال قطعی استوری دوم به همراه کلیدهای ساخت مجدد
                 with open(a_out, "rb") as f_a:
                     await bot.send_photo(
                         chat_id=chat_id,
                         photo=f_a,
-                        caption=f"🎯 **استوری ۲ (پاسخ و تحلیل چارت):**\n\n{a_data['body']}".replace("*", ""),
+                        caption=(
+                            "🎯 **استوری ۲ (پاسخ و تحلیل چارت با رسم خطوط):**\n\n"
+                            f"{a_data['body']}".replace("*", "")
+                        ),
                         reply_markup=self._result_actions_menu(slug, "story", cat_key),
                     )
                 return
@@ -215,7 +227,7 @@ class ViraTelegramBot:
             os.makedirs(out_dir, exist_ok=True)
 
             art_path = os.path.join(out_dir, "art.jpg")
-            v_prompt = story_res.get("visual", "cinematic digital art masterpiece, no text")
+            v_prompt = story_res.get("visual", "cinematic digital art masterpiece, no text, no speech bubbles")
             img_ok = await self.llm.generate_image(v_prompt, art_path)
 
             out_path = os.path.join(out_dir, "story_final.jpg")
@@ -251,7 +263,7 @@ class ViraTelegramBot:
             arts = []
             for idx, s in enumerate(slides):
                 art_file = os.path.join(out_dir, f"art_{idx}.jpg")
-                v_prompt = s.get("visual", "cinematic digital art, no text")
+                v_prompt = s.get("visual", "cinematic digital art, no text, no speech bubbles")
                 ok = await self.llm.generate_image(v_prompt, art_file)
                 arts.append(art_file if ok else None)
 
@@ -286,7 +298,7 @@ class ViraTelegramBot:
             arts = []
             for idx, s in enumerate(scenes):
                 art_file = os.path.join(out_dir, f"art_{idx}.jpg")
-                v_prompt = s.get("visual", "cinematic art, no text")
+                v_prompt = s.get("visual", "cinematic art, no text, no speech bubbles")
                 ok = await self.llm.generate_image(v_prompt, art_file)
                 arts.append(art_file if ok else None)
 
@@ -325,7 +337,7 @@ class ViraTelegramBot:
         elif data == "menu:select_page":
             await q.edit_message_text("🎯 برای کدام پیج می‌خواهی محتوا بسازی؟", reply_markup=self._page_selection_menu())
 
-        # دکمه بازگشت مطمئن به پیج (چه از عکس آمده باشد چه از متن)
+        # دکمه بازگشت به پیج
         elif data.startswith("page_hub:") or data.startswith("nav_page:"):
             slug = data.split(":")[1]
             page = self.db.get_page_by_slug(slug)
