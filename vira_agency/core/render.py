@@ -1,7 +1,9 @@
 """
 موتور رندرینگ گرافیکی دستیار ویرا
-حفظ ۱۰۰٪ تناسب و نسبت تصویر بدون دفرمه شدن (Smart Aspect Ratio & Fit)
-طراحی اختصاصی برای ۳ پیج: ترید، روانشناسی تاریک و هنر پاپیه‌ماشه
+شامل اصلاح کامل آیدی و واترمارک رسمی هر ۳ پیج:
+۱. روانشناسی معامله‌گری: @tradebazehn | روانشناسی معامله‌گری
+۲. ذهن زیبا: @zehnayetaarik | ذهن زیبا
+۳. گالری هنری الهه: @elartgallery.ir | گالری هنری الهه
 """
 import os
 import re
@@ -18,17 +20,15 @@ TAG_LABELS_FA = {
     "t_psyc": "روانشناسی ترید",
     "t_hunt": "شکار استاپ",
     "t_bull": "نبرد گاو و خرس",
-    "d_chal": "چالش روز",
-    "d_edu": "ترفند تاریک",
+    "d_chal": "دوراهی شوالیه",
+    "d_edu": "ترفند مکر",
     "d_mar": "قوانین رابطه",
     "d_opt": "تست شخصیت",
     "d_sec": "زبان بدن",
-    "art_mirror": "آینه ترند دکوراسیون",
-    "art_decor": "اکسسوری و ظروف مدرن",
-    "art_sculpture": "مجسمه فرم آزاد و مینیمال",
-    "behind": "پشت صحنه ساخت",
-    "showcase": "دکوراسیون منزل",
-    "workshop": "آموزش و کارگاه",
+    "art_mirror": "آینه وابی‌سابی",
+    "art_decor": "ظروف دکوراتیو",
+    "art_sculpture": "مجسمه فرم آزاد",
+    "behind": "پشت صحنه گالری",
 }
 
 
@@ -74,7 +74,7 @@ def _get_theme(tag_or_slug: str):
             "accent": (74, 222, 128),
             "text": (255, 255, 255),
             "sub": (226, 232, 240),
-            "watermark": "@tradebazehn | تحلیل بازار"
+            "watermark": "@tradebazehn | روانشناسی معامله‌گری"
         }
     elif s.startswith("d_") or "dark" in s:
         return {
@@ -83,7 +83,7 @@ def _get_theme(tag_or_slug: str):
             "accent": (239, 68, 68),
             "text": (255, 255, 255),
             "sub": (229, 231, 235),
-            "watermark": "@tradebazehn | روانشناسی تاریک"
+            "watermark": "@zehnayetaarik | ذهن زیبا"
         }
     else:
         return {
@@ -92,19 +92,16 @@ def _get_theme(tag_or_slug: str):
             "accent": (249, 115, 22),
             "text": (254, 243, 199),
             "sub": (253, 230, 138),
-            "watermark": "@papermache_art | هنر دست‌ساز"
+            "watermark": "@elartgallery.ir | گالری هنری الهه"
         }
 
 
 def _fit_image_preserve_aspect(raw_img: Image.Image, target_w: int = 1080, target_h: int = 1920) -> Image.Image:
-    """متد ربات قبلی: کراپ هوشمند مرکز بدون کوچک‌ترین دفرمه شدن یا کشیدگی عرض/طول"""
     img_w, img_h = raw_img.size
     scale = max(target_w / img_w, target_h / img_h)
     new_w = int(img_w * scale)
     new_h = int(img_h * scale)
     resized = raw_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    
-    # برش متمرکز روی بالای تصویر (تا سر کاراکترها و سوژه بریده نشود)
     left = (new_w - target_w) // 2
     top = int((new_h - target_h) * 0.15)
     top = max(0, min(top, new_h - target_h))
@@ -183,7 +180,7 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
     theme = _get_theme(tag)
     tag_lower = (tag or "").lower()
     is_dark = tag_lower.startswith("d_") or "dark" in tag_lower
-    is_art = tag_lower.startswith("art_") or tag_lower in ("behind", "showcase", "workshop") or "art" in tag_lower
+    is_art = tag_lower.startswith("art_") or tag_lower in ("behind", "showcase", "workshop") or "art" in tag_lower or "papermache" in tag_lower
     is_news = tag_lower == "t_news"
 
     if art_path and os.path.exists(art_path) and os.path.getsize(art_path) > 500:
@@ -202,7 +199,7 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
     body = str(story_obj.get("body") or "").strip()
     sticker = str(story_obj.get("sticker") or "").strip()
 
-    # استایل ۱: روانشناسی تاریک (بدون کادر، تصویر واضح، تیتر درشت با خط سرخ)
+    # ۱. پیج ذهن زیبا (روانشناسی تاریک): بدون کادر، تیتر درشت و خط سرخ زیر آن
     if is_dark:
         gradient = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
         d_grad = ImageDraw.Draw(gradient)
@@ -232,22 +229,22 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
             _draw_rich_persian_line(draw, bline, 1000, y_cursor, font_body, (230, 230, 230), (239, 68, 68))
             y_cursor += 62
 
-        draw.text((540, 1850), _shape_persian(theme["watermark"]), fill=(180, 50, 50), font=font_wm, anchor="ma")
+        draw.text((540, 1850), _shape_persian(theme["watermark"]), fill=(200, 60, 60), font=font_wm, anchor="ma")
 
-    # استایل ۲: هنر پاپیه‌ماشه (فرم براش ارگانیک و پالت کرم/نارنجی/سبز)
+    # ۲. پیج گالری هنری الهه: پالت کرم شنی، براش هنری و دعوت به سفارش
     elif is_art:
         overlay = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
         d_overlay = ImageDraw.Draw(overlay)
         _draw_brush_background(
             d_overlay, 55, 1080, 1025, 1830,
-            fill_color=(247, 243, 236, 240),
+            fill_color=(247, 243, 236, 242),
             stroke_color=(217, 119, 6, 230)
         )
 
         final_canvas = Image.alpha_composite(base_img, overlay).convert("RGB")
         draw = ImageDraw.Draw(final_canvas)
 
-        tag_clean = TAG_LABELS_FA.get(tag, "کارگاه پاپیه‌ماشه")
+        tag_clean = TAG_LABELS_FA.get(tag, "گالری الهه")
         draw.text((940, 1130), _shape_persian(f"✦ {tag_clean}"), fill=(40, 90, 60), font=font_tag, anchor="ra")
 
         head_tokens = _tokenize_text(heading)
@@ -273,7 +270,7 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
 
         draw.text((540, 1860), _shape_persian(theme["watermark"]), fill=(180, 83, 9), font=font_wm, anchor="ma")
 
-    # استایل ۳: ترید (کادر شیشه‌ای بنفش و سبز نئونی)
+    # ۳. پیج روانشناسی معامله‌گری: کادر شیشه‌ای بنفش سلطنتی و نئون سبز
     else:
         crop_box = (40, 1040, 1040, 1850)
         lower_crop = base_img.crop(crop_box)
@@ -287,7 +284,7 @@ def render_story(brand, story_obj, out_path, index, bgs, logo, tag, art_path=Non
         final_canvas = Image.alpha_composite(base_img, overlay).convert("RGB")
         draw = ImageDraw.Draw(final_canvas)
 
-        tag_clean = TAG_LABELS_FA.get(tag, "تحلیل بازار")
+        tag_clean = TAG_LABELS_FA.get(tag, "روانشناسی ترید")
         draw.text((975, 1115), _shape_persian(f"• {tag_clean} •"), fill=theme["accent"], font=font_tag, anchor="ra")
 
         head_tokens = _tokenize_text(heading)
