@@ -436,7 +436,7 @@ class ArtAgent:
         return fallbacks.get(cat_key, fallbacks["art_mirror"])
 
     async def make_carousel(self, topic: str, count: int = 4) -> Dict[str, Any]:
-        slides = [
+        full_slides = [
             {
                 "heading": f"کالکشن گالری الهه: {topic}",
                 "body": "ترکیب بافت‌های دست‌ساز و ارگانیک با چیدمان خانه مدرن، **حس گرما و اصالت ماندگار** به فضا می‌بخشد.",
@@ -445,22 +445,53 @@ class ArtAgent:
             {
                 "heading": "هنر نقص‌های کامل (وابی‌سابی)",
                 "body": "زیبایی مجسمه‌های پاپیه‌ماشه در ناصافی‌های ظریف و دست‌ساز آن است که **هیچ نمونه دومی در جهان ندارد**.",
-                "visual": "Close-up of a textured cream paper mache organic sculpture with soft shadows, no text"
+                "visual": "Close-up of a textured cream paper mache organic sculpture with soft shadows, natural window light, no text"
             },
             {
                 "heading": "سبک‌وزن اما مستحکم",
-                "body": "به لطف الیاف مقاوم، این ظروف و آینه‌ها سبک بوده و **در برابر ضربه و جابه‌جایی مقاومت بسیار بالایی دارند**.",
-                "visual": "A stylish handcrafted paper mache mirror hanging on a warm beige wall with linen curtains, no text"
+                "body": "به لطف الیاف مقاوم سلولزی، این ظروف و آینه‌ها سبک بوده و **در برابر ضربه و جابه‌جایی مقاومت بسیار بالایی دارند**.",
+                "visual": "A stylish handcrafted paper mache wavy mirror hanging on a warm beige wall with linen curtains, no text"
+            },
+            {
+                "heading": "سازگار با انواع چیدمان",
+                "body": "رنگ‌های نود، شنی و خاکستری مات باعث می‌شوند این اکسسوری‌ها با **هر پالت رنگی مبلمان و دکوراسیون** به زیبایی ست شوند.",
+                "visual": "Modern entryway console table decorated with organic paper mache bowl and dried pampas grass, warm sunlight, no text"
+            },
+            {
+                "heading": "پوشش محافظ ضد رطوبت",
+                "body": "تمامی قطعات با وارنیش‌های مات و بی‌رنگ عایق می‌شوند تا **گردگیری با دستمال مرطوب** بدون آسیب به بافت انجام شود.",
+                "visual": "Artisan hand holding a delicate textured paper mache vessel under soft warm studio lighting, no text"
+            },
+            {
+                "heading": "تلاقی آرامش و فرم مینیمال",
+                "body": "حضور المان‌های طبیعی در خانه، اضطراب روزمره را کاهش داده و **فضایی امن و چشم‌نواز** خلق می‌کند.",
+                "visual": "Cozy living room corner with a comfortable boucle armchair and minimalist handmade paper mache table lamp, no text"
             },
             {
                 "heading": "سفارش در ابعاد اختصاصی",
-                "body": "شما می‌توانید هر اثر را با **رنگ‌بندی هماهنگ با منزل خود** سفارش دهید. برای مشاوره به دایرکت @elartgallery.ir پیام دهید.",
-                "visual": "Cozy artisan studio table with paper mache materials, dried plants and warm lighting, no text"
+                "body": "شما می‌توانید هر اثر را با **رنگ‌بندی و سایز هماهنگ با منزل خود** سفارش دهید. برای مشاوره به دایرکت پیام دهید.",
+                "visual": "Cozy artisan studio table with paper mache sculpting tools, textured clay samples and warm morning light, no text"
+            },
+            {
+                "heading": "پایان: اصالت اثر دست‌ساز",
+                "body": "خانه‌ای که با هنر دست آراسته شده، داستانی برای گفتن دارد. **کدام فرم و بافت را برای منزلتان بیشتر می‌پسندید؟**",
+                "visual": "Artisan carefully placing a unique organic sculpture inside an elegant luxury gift box, aesthetic packaging, no text"
+            },
+            {
+                "heading": "ارسال ایمن به سراسر کشور",
+                "body": "بسته‌بندی ضربه‌گیر چندلایه متضمن رسیدن **کاملاً سالم و بدون آسیب اثر** به دست شماست.",
+                "visual": "Carefully wrapped delicate ceramic-like paper mache craft package with linen ribbon, no text"
+            },
+            {
+                "heading": "ذخیره کالکشن",
+                "body": "این پست را ذخیره کنید تا هنگام تغییر چیدمان یا خرید هدیه، **ایده‌های مدرن دکوراسیون** را در دسترس داشته باشید.",
+                "visual": "Minimalist beige bookmark icon resting beside an aesthetic textured sculpture on oak shelf, no text"
             }
         ]
+        chosen_slides = full_slides[:max(1, min(count, len(full_slides)))]
         return {
-            "slides": slides[:count],
-            "caption": f"🎨 معرفی کالکشن اختصاصی در گالری هنری الهه (ELART GALLERY).\nپیج رسمی: @elartgallery.ir\n#گالری_الهه #پاپیه_ماشه #دکوراسیون_مدرن"
+            "slides": chosen_slides,
+            "caption": f"🎨 معرفی کالکشن اختصاصی در گالری هنری الهه (ELART GALLERY) - {len(chosen_slides)} اسلاید.\nپیج رسمی: @elartgallery.ir\n#گالری_الهه #پاپیه_ماشه #دکوراسیون_مدرن #صنایع_دستی"
         }
 
     async def make_reel(self, topic: str) -> Dict[str, Any]:
