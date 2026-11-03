@@ -1,6 +1,6 @@
 """
 vira_agency/main.py
-هماهنگ‌کننده مرکزی ربات تلگرام با وب‌سرور سلامت رندر و سیستم تولید محتوای ناظر
+هماهنگ‌کننده مرکزی ربات تلگرام با وب‌سرور سلامت رندر (پورت 10000) و مدیریت متدهای ایمن
 """
 import asyncio
 import io
@@ -8,7 +8,7 @@ import os
 import logging
 from aiohttp import web
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 from vira_agency.agents.department_agents import DarkPsychAgent, TradingAgent, ArtAgent
 from vira_agency.core.render import render_story_layout, render_carousel_slide
@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vira_agency")
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+PORT = int(os.getenv("PORT", "10000"))
 
 dark_agent = DarkPsychAgent()
 trade_agent = TradingAgent()
@@ -28,14 +28,12 @@ art_agent = ArtAgent()
 async def health_check(request):
     return web.Response(text="OK", status=200)
 
-async def start_web_server():
-    app = web.Application()
-    app.router.add_get("/", health_check)
-    app.router.add_get("/healthz", health_check)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 10000)
-    await site.start()
+async def _safe_show_menu(q, text: str, kb: list):
+    """جلوگیری از ارور Message to edit not found تلگرام"""
+    try:
+        await q.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
+    except Exception:
+        await q.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "سلام! دستیار هوشمند آژانس ویرا آماده تولید محتواست 🤖✨"
@@ -47,12 +45,6 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(kb))
     else:
         await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(kb))
-
-async def _safe_show_menu(q, text: str, kb: list):
-    try:
-        await q.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
-    except Exception:
-        await q.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb))
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -197,28 +189,55 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.reply_photo(photo=buf, caption=f"🏺 {st['title']}\n{st['text']}", reply_markup=InlineKeyboardMarkup(kb))
 
     elif data == "quick_crypto":
-        from vira_agency.core.market_news import get_crypto_snapshot
-        data_res = await get_crypto_snapshot()
-        msg = (
-            f"📊 وضعیت زنده بازار کریپتو:\n"
-            f"🔹 قیمت بیت‌کوین: ${data_res.get('btc_price', 0):,.2f}\n"
-            f"🔹 تغییرات ۲۴ ساعت: {data_res.get('btc_change', 0):+.2f}%\n"
-            f"🔹 سقف و کف روزانه: ${data_res.get('btc_high', 0):,.2f} / ${data_res.get('btc_low', 0):,.2f}\n\n"
-            f"📰 تیتر خبر منتخب:\n{data_res.get('news_headline', 'داده‌ای دریافت نشد.')}"
-        )
+        try:
+            from vira_agency.core.market_news import get_crypto_snapshot
+            data_res = await get_crypto_snapshot()
+            msg = (
+                f"📊 وضعیت زنده بازار کریپتو:\n"
+                f"🔹 قیمت بیت‌کوین: ${data_res.get('btc_price', 0):,.2f}\n"
+                f"🔹 تغییرات ۲۴ ساعت: {data_res.get('btc_change', 0):+.2f}%\n"
+                f"🔹 سقف و کف روزانه: ${data_res.get('btc_high', 0):,.2f} / ${data_res.get('btc_low', 0):,.2f}\n\n"
+                f"📰 تیتر خبر منتخب:\n{data_res.get('news_headline', 'داده‌ای دریافت نشد.')}"
+            )
+        except Exception as e:
+            msg = f"خطا در دریافت وضعیت کریپتو: {e}"
         kb = [[InlineKeyboardButton("🔙 بازگشت به خانه", callback_data="nav_home")]]
         await _safe_show_menu(q, msg, kb)
 
     elif data == "nav_home":
         await start_cmd(update, context)
 
+async def run_bot_and_server():
+    """اجرای همزمان وب‌سرور روی پورت 10000 و پولینگ تلگرام بدون مسدود کردن یکدیگر"""
+    # ۱. راه‌اندازی وب‌سرور سلامت
+    web_app = web.Application()
+    web_app.router.add_get("/", health_check)
+    web_app.router.add_get("/healthz", health_check)
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    logger.info(f"🌐 وب‌سرور سلامت رندر روی پورت {PORT} با موفقیت روشن شد.")
+
+    # ۲. راه‌اندازی ربات تلگرام
+    bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
+    bot_app.add_handler(CommandHandler("start", start_cmd))
+    bot_app.add_handler(CallbackQueryHandler(callback_handler))
+
+    await bot_app.initialize()
+    await bot_app.start()
+    await bot_app.updater.start_polling(drop_pending_updates=True)
+    logger.info("🤖 ربات تلگرام ویرا با موفقیت آماده به کار شد.")
+
+    # نگه داشتن اجرای زنده برنامه
+    while True:
+        await asyncio.sleep(3600)
+
 def main():
-    asyncio.run(start_web_server())
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CallbackQueryHandler(callback_handler))
-    logger.info("دستیار ویرا آنلاین است.")
-    app.run_polling(drop_pending_updates=True)
+    try:
+        asyncio.run(run_bot_and_server())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("سرویس خاموش شد.")
 
 if __name__ == "__main__":
     main()
